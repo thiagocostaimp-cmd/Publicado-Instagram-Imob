@@ -44,13 +44,21 @@ function resolveJwtSecret() {
   return generated;
 }
 
+const databaseUrl =
+  process.env.DATABASE_URL ||
+  "postgres://postgres:postgres@localhost:5432/seulugar";
+
 const config = {
   port: Number(process.env.PORT || 4000),
   nodeEnv: process.env.NODE_ENV || "development",
   frontendOrigin: process.env.FRONTEND_ORIGIN || "http://localhost:5173",
   jwtSecret: resolveJwtSecret(),
   jwtExpiresDays: Number(process.env.JWT_EXPIRES_DAYS || 30),
-  databaseFile: path.join(ROOT, process.env.DATABASE_FILE || "./data/seulugar.db"),
+  databaseUrl,
+  // Neon, Supabase e a maioria dos Postgres gerenciados exigem SSL. Um
+  // Postgres rodando na própria máquina (localhost) normalmente não tem SSL
+  // configurado, então desligamos automaticamente nesse caso.
+  databaseSsl: !databaseUrl.includes("localhost") && !databaseUrl.includes("127.0.0.1"),
 };
 
 module.exports = config;

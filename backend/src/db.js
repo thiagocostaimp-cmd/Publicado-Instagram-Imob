@@ -1,42 +1,41 @@
-// Camada de banco de dados. Usa o módulo nativo node:sqlite (Node 22.5+),
-// então não precisa de "npm install" para funcionar. É um recurso ainda
-// experimental do Node -- funciona bem para começar, mas antes de vender
-// para várias imobiliárias ao mesmo tempo (mais de um servidor, mais
-// escrita simultânea), troque para Postgres. Veja o README, seção
-// "Migrando para produção" -- as funções abaixo foram escritas para que
-// essa troca não exija mexer nas rotas, só neste arquivo.
+// Camada de banco de dados. Usa Postgres via o pacote "pg" -- funciona com
+// qualquer Postgres (Neon, Supabase, Railway, um Postgres local...), basta
+// apontar DATABASE_URL. Todas as funções são assíncronas (retornam Promise);
+// as rotas em routes.js usam "await" para chamá-las.
 
-const fs = require("fs");
-const path = require("path");
 const crypto = require("crypto");
-const { DatabaseSync } = require("node:sqlite");
+const { Pool } = require("pg");
 const config = require("./config");
 
-fs.mkdirSync(path.dirname(config.databaseFile), { recursive: true });
+// Neon (e a maioria dos Postgres gerenciados) exige conexão via SSL. Em
+// desenvolvimento local (Postgres na própria máquina, sem SSL) isso é
+// desligado automaticamente -- veja config.js.
+const pool = new Pool({
+  connectionString: config.databaseUrl,
+  ssl: config.databaseSsl ? { rejectUnauthorized: false } : false,
+});
 
-const db = new DatabaseSync(config.databaseFile);
-db.exec("PRAGMA foreign_keys = ON;");
+async function init() {
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS organizations (
+      id TEXT PRIMARY KEY,
+      name TEXT NOT NULL,
+      created_at TIMESTAMPTZ NOT NULL
+    );
+  `);
 
-db.exec(`
-  CREATE TABLE IF NOT EXISTS organizations (
-    id TEXT PRIMARY KEY,
-    name TEXT NOT NULL,
-    created_at TEXT NOT NULL
-  );
-`);
-
-db.exec(`
-  CREATE TABLE IF NOT EXISTS users (
-    id TEXT PRIMARY KEY,
-    name TEXT NOT NULL,
-    email TEXT NOT NULL UNIQUE,
-    password_hash TEXT NOT NULL,
-    role TEXT NOT NULL DEFAULT 'member',
-    organization_id TEXT NOT NULL,
-    created_at TEXT NOT NULL,
-    FOREIGN KEY (organization_id) REFERENCES organizations(id)
-  );
-`);
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS users (
+      id TEXT PRIMARY KEY,
+      name TEXT NOT NULL,
+      email TEXT NOT NULL UNIQUE,
+      password_hash TEXT NOT NULL,
+      role TEXT NOT NULL DEFAULT 'member',
+      organization_id TEXT NOT NULL REFERENCES organizations(id),
+      created_at TIMESTAMPTZ NOT NULL
+    );
+  `);
+}
 
 function nowIso() {
   return new Date().toISOString();
@@ -55,67 +54,81 @@ function rowToUser(row) {
   };
 }
 
-// Cria a organização e a primeira conta (admin) numa única operação --
-// ou as duas coisas acontecem, ou nenhuma (evita organização "órfã" sem
-// nenhum usuário se algo falhar no meio).
-function createOrganizationWithAdmin({ organizationName, name, email, passwordHash }) {
+// Cria a organização e a primeira conta (admin) numa única transação -- ou
+// as duas coisas acontecem, ou nenhuma (evita organização "órfã" sem nenhum
+// usuário se algo falhar no meio).
+async function createOrganizationWithAdmin({ organizationName, name, email, passwordHash }) {
   const orgId = crypto.randomUUID();
   const userId = crypto.randomUUID();
   const createdAt = nowIso();
 
-  const insertOrg = db.prepare(
-    "INSERT INTO organizations (id, name, created_at) VALUES (?, ?, ?)"
-  );
-  const insertUser = db.prepare(
-    `INSERT INTO users (id, name, email, password_hash, role, organization_id, created_at)
-     VALUES (?, ?, ?, ?, 'admin', ?, ?)`
-  );
+  const client = await pool.connect();
+  try {
+    await client.query("BEGIN");
+    await client.query(
+      "INSERT INTO organizations (id, name, created_at) VALUES ($1, $2, $3)",
+      [orgId, organizationName, createdAt]
+    );
+    await client.query(
+      `INSERT INTO users (id, name, email, password_hash, role, organization_id, created_at)
+       VALUES ($1, $2, $3, $4, 'admin', $5, $6)`,
+      [userId, name, email, passwordHash, orgId, createdAt]
+    );
+    await client.query("COMMIT");
+  } catch (err) {
+    await client.query("ROLLBACK");
+    throw err;
+  } finally {
+    client.release();
+  }
 
-  insertOrg.run(orgId, organizationName, createdAt);
-  insertUser.run(userId, name, email, passwordHash, orgId, createdAt);
-
+  const userRow = await pool.query("SELECT * FROM users WHERE id = $1", [userId]);
   return {
     organization: { id: orgId, name: organizationName, createdAt },
-    user: rowToUser(db.prepare("SELECT * FROM users WHERE id = ?").get(userId)),
+    user: rowToUser(userRow.rows[0]),
   };
 }
 
-function findUserByEmail(email) {
-  const row = db.prepare("SELECT * FROM users WHERE email = ?").get(email);
-  return rowToUser(row);
+async function findUserByEmail(email) {
+  const result = await pool.query("SELECT * FROM users WHERE email = $1", [email]);
+  return rowToUser(result.rows[0]);
 }
 
-function findUserById(id) {
-  const row = db.prepare("SELECT * FROM users WHERE id = ?").get(id);
-  return rowToUser(row);
+async function findUserById(id) {
+  const result = await pool.query("SELECT * FROM users WHERE id = $1", [id]);
+  return rowToUser(result.rows[0]);
 }
 
-function findOrganizationById(id) {
-  return db.prepare("SELECT * FROM organizations WHERE id = ?").get(id) || null;
+async function findOrganizationById(id) {
+  const result = await pool.query("SELECT * FROM organizations WHERE id = $1", [id]);
+  return result.rows[0] || null;
 }
 
-function listUsersByOrganization(organizationId) {
-  const rows = db
-    .prepare("SELECT * FROM users WHERE organization_id = ? ORDER BY created_at ASC")
-    .all(organizationId);
-  return rows.map(rowToUser);
+async function listUsersByOrganization(organizationId) {
+  const result = await pool.query(
+    "SELECT * FROM users WHERE organization_id = $1 ORDER BY created_at ASC",
+    [organizationId]
+  );
+  return result.rows.map(rowToUser);
 }
 
-function createUser({ name, email, passwordHash, role, organizationId }) {
+async function createUser({ name, email, passwordHash, role, organizationId }) {
   const id = crypto.randomUUID();
   const createdAt = nowIso();
-  db.prepare(
+  await pool.query(
     `INSERT INTO users (id, name, email, password_hash, role, organization_id, created_at)
-     VALUES (?, ?, ?, ?, ?, ?, ?)`
-  ).run(id, name, email, passwordHash, role, organizationId, createdAt);
+     VALUES ($1, $2, $3, $4, $5, $6, $7)`,
+    [id, name, email, passwordHash, role, organizationId, createdAt]
+  );
   return findUserById(id);
 }
 
-function deleteUser(id) {
-  db.prepare("DELETE FROM users WHERE id = ?").run(id);
+async function deleteUser(id) {
+  await pool.query("DELETE FROM users WHERE id = $1", [id]);
 }
 
 module.exports = {
+  init,
   createOrganizationWithAdmin,
   findUserByEmail,
   findUserById,

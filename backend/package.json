@@ -2,12 +2,15 @@
   "name": "seulugar-backend",
   "version": "0.1.0",
   "private": true,
-  "description": "API do Seu Lugar SaaS -- zero dependências externas (só Node.js nativo). Rode com: node src/server.js",
+  "description": "API + frontend do Seu Lugar SaaS. Banco de dados: Postgres (via DATABASE_URL). Rode com: npm install && node src/server.js",
   "scripts": {
     "start": "node src/server.js",
     "dev": "node --watch src/server.js"
   },
   "engines": {
     "node": ">=22.5.0"
+  },
+  "dependencies": {
+    "pg": "^8.23.0"
   }
 }

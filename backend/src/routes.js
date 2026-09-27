@@ -12,13 +12,13 @@ const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 // válido. Lê o token do cookie (já colocado em req.sessionToken pelo server),
 // verifica a assinatura/validade, carrega o usuário do banco e guarda em
 // req.user para as rotas usarem.
-function requireAuth(req, res) {
+async function requireAuth(req, res) {
   const payload = auth.verify(req.sessionToken);
   if (!payload) {
     res.json(401, { error: "Não autenticado." });
     return null;
   }
-  const user = db.findUserById(payload.userId);
+  const user = await db.findUserById(payload.userId);
   if (!user) {
     res.json(401, { error: "Sessão inválida." });
     return null;
@@ -52,12 +52,12 @@ function register(router) {
     if (String(password).length < 8) {
       return res.json(400, { error: "A senha precisa ter pelo menos 8 caracteres." });
     }
-    if (db.findUserByEmail(email)) {
+    if (await db.findUserByEmail(email)) {
       return res.json(409, { error: "Já existe uma conta com este e-mail." });
     }
 
     const passwordHash = auth.hashPassword(password);
-    const { user } = db.createOrganizationWithAdmin({
+    const { user } = await db.createOrganizationWithAdmin({
       organizationName,
       name,
       email,
@@ -76,7 +76,7 @@ function register(router) {
     }
 
     const invalidMsg = "E-mail ou senha incorretos.";
-    const user = db.findUserByEmail(email);
+    const user = await db.findUserByEmail(email);
     if (!user || !auth.verifyPassword(password, user.passwordHash)) {
       return res.json(401, { error: invalidMsg });
     }
@@ -92,9 +92,9 @@ function register(router) {
   });
 
   router.get("/api/auth/me", async (req, res) => {
-    const user = requireAuth(req, res);
+    const user = await requireAuth(req, res);
     if (!user) return;
-    const org = db.findOrganizationById(user.organizationId);
+    const org = await db.findOrganizationById(user.organizationId);
     return res.json(200, {
       user: { ...publicUser(user), organization: org ? { id: org.id, name: org.name } : null },
     });
@@ -102,9 +102,9 @@ function register(router) {
 
   // Lista todo mundo da mesma organização de quem está logado.
   router.get("/api/team", async (req, res) => {
-    const user = requireAuth(req, res);
+    const user = await requireAuth(req, res);
     if (!user) return;
-    const users = db.listUsersByOrganization(user.organizationId);
+    const users = await db.listUsersByOrganization(user.organizationId);
     return res.json(200, { users: users.map(publicUser) });
   });
 
@@ -112,7 +112,7 @@ function register(router) {
   // é definida aqui pelo admin -- ainda não há envio de e-mail de convite
   // configurado (veja o README, "Próximos passos" para adicionar isso).
   router.post("/api/team", async (req, res) => {
-    const user = requireAuth(req, res);
+    const user = await requireAuth(req, res);
     if (!user) return;
     if (!requireAdmin(user, res)) return;
 
@@ -126,13 +126,13 @@ function register(router) {
     if (String(password).length < 8) {
       return res.json(400, { error: "A senha precisa ter pelo menos 8 caracteres." });
     }
-    if (db.findUserByEmail(email)) {
+    if (await db.findUserByEmail(email)) {
       return res.json(409, { error: "Já existe uma conta com este e-mail." });
     }
 
     const finalRole = role === "admin" ? "admin" : "member";
     const passwordHash = auth.hashPassword(password);
-    const newUser = db.createUser({
+    const newUser = await db.createUser({
       name,
       email,
       passwordHash,
@@ -145,18 +145,18 @@ function register(router) {
   // Remove o acesso de alguém do time. Não deixa remover a própria conta por
   // aqui, para a organização nunca ficar sem nenhum admin por acidente.
   router.delete("/api/team/:id", async (req, res) => {
-    const user = requireAuth(req, res);
+    const user = await requireAuth(req, res);
     if (!user) return;
     if (!requireAdmin(user, res)) return;
 
-    const target = db.findUserById(req.params.id);
+    const target = await db.findUserById(req.params.id);
     if (!target || target.organizationId !== user.organizationId) {
       return res.json(404, { error: "Usuário não encontrado." });
     }
     if (target.id === user.id) {
       return res.json(400, { error: "Você não pode remover sua própria conta por aqui." });
     }
-    db.deleteUser(target.id);
+    await db.deleteUser(target.id);
     return res.json(200, { ok: true });
   });
 
