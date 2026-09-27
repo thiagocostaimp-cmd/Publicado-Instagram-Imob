@@ -1,0 +1,115 @@
+<!doctype html>
+<html lang="pt-br">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Seu Lugar &middot; Painel</title>
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+
+  <!-- Tela de login / criação da conta da imobiliária -->
+  <section id="auth-view">
+    <div class="auth-card">
+      <h1 class="brand">Seu<span class="accent">Lugar</span></h1>
+      <p class="subtitle">Imobiliária Descomplicada &mdash; painel do time</p>
+
+      <div class="tabs">
+        <button type="button" class="tab-btn active" data-tab="login">Entrar</button>
+        <button type="button" class="tab-btn" data-tab="register">Criar minha imobiliária</button>
+      </div>
+
+      <div id="auth-error" class="error-msg" hidden></div>
+
+      <form id="login-form">
+        <label>E-mail
+          <input type="email" id="login-email" required autocomplete="username" />
+        </label>
+        <label>Senha
+          <input type="password" id="login-password" required autocomplete="current-password" />
+        </label>
+        <button type="submit" class="btn btn-primary">Entrar</button>
+        <p class="hint">Use o e-mail e a senha que o administrador da sua imobiliária criou para você.</p>
+      </form>
+
+      <form id="register-form" hidden>
+        <label>Nome da imobiliária
+          <input type="text" id="reg-org" required placeholder="Seu Lugar Imobiliária" />
+        </label>
+        <label>Seu nome
+          <input type="text" id="reg-name" required />
+        </label>
+        <label>Seu e-mail
+          <input type="email" id="reg-email" required autocomplete="username" />
+        </label>
+        <label>Crie uma senha
+          <input type="password" id="reg-password" required minlength="8" autocomplete="new-password" />
+        </label>
+        <button type="submit" class="btn btn-primary">Criar conta</button>
+        <p class="hint">Essa conta vira o administrador da imobiliária -- é quem depois cria o login de cada pessoa do time.</p>
+      </form>
+    </div>
+  </section>
+
+  <!-- App depois de logado -->
+  <section id="app-view" hidden>
+    <header class="topbar">
+      <span class="brand" style="color:#fff">Seu<span class="accent">Lugar</span></span>
+      <nav>
+        <button type="button" class="nav-btn active" data-page="dashboard">Início</button>
+        <button type="button" class="nav-btn" data-page="team">Time</button>
+      </nav>
+      <div class="who">
+        <span id="who-org"></span>
+        <span>&middot;</span>
+        <span id="who-name"></span>
+        <span id="who-role" class="badge-role"></span>
+        <button type="button" id="logout-btn" class="btn btn-secondary" style="padding:4px 10px;font-size:0.78rem;">Sair</button>
+      </div>
+    </header>
+
+    <main>
+      <section id="page-dashboard">
+        <div class="card">
+          <h2>Bem-vindo(a) de volta</h2>
+          <p>Este é o começo do painel do <strong>Seu Lugar</strong>. As telas de imóveis, publicação no Instagram e controle financeiro entram aqui conforme forem migradas para este sistema.</p>
+        </div>
+      </section>
+
+      <section id="page-team" hidden>
+        <div class="card">
+          <h2>Time da imobiliária</h2>
+          <p class="hint">Cada pessoa entra com o próprio e-mail e senha, no computador dela.</p>
+          <table>
+            <thead>
+              <tr><th>Nome</th><th>E-mail</th><th>Papel</th><th class="row-actions"></th></tr>
+            </thead>
+            <tbody id="team-table-body"></tbody>
+          </table>
+        </div>
+
+        <div class="card" id="team-add-card">
+          <h2>Criar login para uma nova pessoa</h2>
+          <div id="team-error" class="error-msg" hidden></div>
+          <form id="team-add-form" class="inline-form">
+            <label>Nome
+              <input type="text" id="team-name" required />
+            </label>
+            <label>E-mail
+              <input type="email" id="team-email" required />
+            </label>
+            <label>Senha inicial
+              <input type="password" id="team-password" required minlength="8" />
+            </label>
+            <button type="submit" class="btn btn-primary">Adicionar</button>
+          </form>
+          <p class="hint">A pessoa pode (e deve) trocar essa senha depois -- essa tela ainda não tem "esqueci minha senha"; veja o README para adicionar isso.</p>
+        </div>
+      </section>
+    </main>
+  </section>
+
+  <script src="config.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>

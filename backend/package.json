@@ -1,0 +1,13 @@
+{
+  "name": "seulugar-backend",
+  "version": "0.1.0",
+  "private": true,
+  "description": "API do Seu Lugar SaaS -- zero dependências externas (só Node.js nativo). Rode com: node src/server.js",
+  "scripts": {
+    "start": "node src/server.js",
+    "dev": "node --watch src/server.js"
+  },
+  "engines": {
+    "node": ">=22.5.0"
+  }
+}

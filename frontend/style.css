@@ -1,0 +1,279 @@
+/* Cores da identidade visual do Seu Lugar Imobiliária. */
+:root {
+  --preto: #000000;
+  --cinza-escuro: #363636;
+  --cinza-claro: #e4e4e4;
+  --vermelho: #e2332a;
+  --branco: #ffffff;
+  --fundo: #f7f6f5;
+  --sombra: 0 1px 3px rgba(0, 0, 0, 0.08), 0 1px 2px rgba(0, 0, 0, 0.06);
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  background: var(--fundo);
+  color: var(--cinza-escuro);
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+}
+
+[hidden] {
+  display: none !important;
+}
+
+.brand {
+  font-weight: 800;
+  letter-spacing: 0.02em;
+  color: var(--preto);
+}
+
+.brand .accent {
+  color: var(--vermelho);
+}
+
+/* --- Tela de login/registro --- */
+#auth-view {
+  min-height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+}
+
+.auth-card {
+  width: 100%;
+  max-width: 380px;
+  background: var(--branco);
+  border-radius: 16px;
+  box-shadow: var(--sombra);
+  padding: 32px 28px;
+}
+
+.auth-card h1 {
+  font-size: 1.5rem;
+  margin: 0 0 4px;
+}
+
+.auth-card .subtitle {
+  color: #6b6b6b;
+  font-size: 0.9rem;
+  margin: 0 0 20px;
+}
+
+.tabs {
+  display: flex;
+  gap: 4px;
+  background: var(--cinza-claro);
+  border-radius: 10px;
+  padding: 4px;
+  margin-bottom: 20px;
+}
+
+.tab-btn {
+  flex: 1;
+  border: none;
+  background: transparent;
+  padding: 8px 10px;
+  border-radius: 8px;
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: var(--cinza-escuro);
+  cursor: pointer;
+}
+
+.tab-btn.active {
+  background: var(--branco);
+  box-shadow: var(--sombra);
+}
+
+form {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+label {
+  font-size: 0.78rem;
+  font-weight: 600;
+  color: #555;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+input {
+  padding: 10px 12px;
+  border: 1px solid #d8d6d4;
+  border-radius: 8px;
+  font-size: 0.95rem;
+}
+
+input:focus {
+  outline: 2px solid var(--vermelho);
+  outline-offset: 1px;
+}
+
+.btn {
+  border: none;
+  border-radius: 8px;
+  padding: 10px 16px;
+  font-weight: 700;
+  font-size: 0.9rem;
+  cursor: pointer;
+}
+
+.btn-primary {
+  background: var(--vermelho);
+  color: var(--branco);
+}
+
+.btn-primary:hover {
+  background: #c72b23;
+}
+
+.btn-secondary {
+  background: var(--cinza-claro);
+  color: var(--cinza-escuro);
+}
+
+.btn-danger {
+  background: transparent;
+  color: var(--vermelho);
+  border: 1px solid var(--vermelho);
+}
+
+.error-msg {
+  background: #fdeceb;
+  color: #a3221b;
+  border-radius: 8px;
+  padding: 8px 10px;
+  font-size: 0.82rem;
+}
+
+.hint {
+  font-size: 0.75rem;
+  color: #6b6b6b;
+}
+
+/* --- Shell do app depois de logado --- */
+#app-view {
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+}
+
+.topbar {
+  background: var(--preto);
+  color: var(--branco);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 14px 24px;
+}
+
+.topbar nav {
+  display: flex;
+  gap: 6px;
+}
+
+.topbar nav button {
+  background: transparent;
+  border: none;
+  color: #cfcfcf;
+  padding: 6px 12px;
+  border-radius: 8px;
+  font-weight: 600;
+  cursor: pointer;
+  font-size: 0.85rem;
+}
+
+.topbar nav button.active,
+.topbar nav button:hover {
+  background: var(--cinza-escuro);
+  color: var(--branco);
+}
+
+.who {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 0.82rem;
+  color: #cfcfcf;
+}
+
+.badge-role {
+  background: var(--vermelho);
+  color: var(--branco);
+  border-radius: 999px;
+  padding: 2px 9px;
+  font-size: 0.7rem;
+  font-weight: 700;
+  text-transform: uppercase;
+}
+
+main {
+  flex: 1;
+  padding: 28px 24px;
+  max-width: 780px;
+  width: 100%;
+  margin: 0 auto;
+}
+
+.card {
+  background: var(--branco);
+  border-radius: 14px;
+  box-shadow: var(--sombra);
+  padding: 22px 24px;
+  margin-bottom: 18px;
+}
+
+.card h2 {
+  margin-top: 0;
+  font-size: 1.05rem;
+}
+
+table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.88rem;
+}
+
+th,
+td {
+  text-align: left;
+  padding: 9px 8px;
+  border-bottom: 1px solid var(--cinza-claro);
+}
+
+th {
+  color: #6b6b6b;
+  font-weight: 600;
+  font-size: 0.75rem;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+}
+
+.row-actions {
+  text-align: right;
+}
+
+.inline-form {
+  display: grid;
+  grid-template-columns: 1fr 1fr 1fr auto;
+  gap: 10px;
+  align-items: end;
+  margin-top: 6px;
+}
+
+.inline-form label {
+  margin: 0;
+}
+
+@media (max-width: 640px) {
+  .inline-form {
+    grid-template-columns: 1fr;
+  }
+}
