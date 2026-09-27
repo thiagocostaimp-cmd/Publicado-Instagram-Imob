@@ -1,0 +1,106 @@
+<!doctype html>
+<html lang="pt-br">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Seu Lugar Publicador</title>
+  <meta name="description" content="Monta capas, carrossel e legenda dos imóveis prontos para baixar e publicar no Instagram.">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@500;600;700;800&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@500;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="publicador.css" />
+</head>
+<body>
+
+<div id="app">
+  <div class="topbar">
+    <div class="brand">
+      <div class="brand-mark">
+        <svg viewBox="0 0 24 24" fill="none"><path d="M4 11.5L12 4l8 7.5" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><path d="M6 10v9a1 1 0 0 0 1 1h10a1 1 0 0 0 1-1v-9" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><path d="M10 20v-5h4v5" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+      </div>
+      <div class="brand-text">
+        <h1>Seu Lugar Publicador</h1>
+        <span>Capas, carrossel e legenda prontos pra postar</span>
+      </div>
+    </div>
+    <div class="topbar-right">
+      <div class="tabs" id="mainTabs">
+        <button class="tab-btn active" data-view="dashboard">Imóveis</button>
+        <button class="tab-btn" data-view="config">Configurações</button>
+      </div>
+      <a href="index.html" class="back-link">← Voltar ao painel</a>
+    </div>
+  </div>
+
+  <!-- DASHBOARD -->
+  <section class="view active" id="view-dashboard">
+    <div class="banner" id="capabilityBanner" style="display:none;"></div>
+    <div class="section-head">
+      <div>
+        <h2>Seus imóveis</h2>
+        <p>Monte o conteúdo de cada imóvel: capa, carrossel e legenda prontos para baixar e postar.</p>
+      </div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap;">
+        <button class="btn btn-ghost btn-sm" id="btnHistorico">Já baixados</button>
+        <button class="btn btn-ghost btn-sm" id="btnBiblioteca">Biblioteca</button>
+        <button class="btn btn-primary" id="btnNovoImovel">+ Novo imóvel</button>
+      </div>
+    </div>
+    <div id="dashboardBody"></div>
+  </section>
+
+  <!-- BIBLIOTECA -->
+  <section class="view" id="view-biblioteca">
+    <div class="section-head">
+      <div>
+        <button class="btn btn-ghost btn-sm" id="btnVoltarBiblioteca" style="margin-bottom:10px;">← Voltar</button>
+        <h2>Biblioteca de imóveis</h2>
+        <p>Todos os imóveis já cadastrados, independente do status — use a busca para achar um antigo rapidamente.</p>
+      </div>
+    </div>
+    <div class="field" style="max-width:360px;">
+      <input type="text" id="bibliotecaBusca" placeholder="Buscar por código, bairro ou tipo…">
+    </div>
+    <div id="bibliotecaBody" style="margin-top:16px;"></div>
+  </section>
+
+  <!-- HISTÓRICO (imóveis já baixados) -->
+  <section class="view" id="view-historico">
+    <div class="section-head">
+      <div>
+        <button class="btn btn-ghost btn-sm" id="btnVoltarHistorico" style="margin-bottom:10px;">← Voltar</button>
+        <h2>Imóveis já baixados</h2>
+        <p>Imóveis com o conteúdo já baixado (.zip), do mais recente para o mais antigo.</p>
+      </div>
+    </div>
+    <div id="historicoBody"></div>
+  </section>
+
+  <!-- WIZARD -->
+  <section class="view" id="view-wizard">
+    <div class="stepper" id="stepper"></div>
+    <div class="panel" id="wizardPanel"></div>
+  </section>
+
+  <!-- CONFIG -->
+  <section class="view" id="view-config">
+    <div class="section-head">
+      <div>
+        <h2>Identidade e automações de texto</h2>
+        <p>Esses dados alimentam as capas, a legenda automática e o banco de hashtags.</p>
+      </div>
+    </div>
+    <div id="configBody"></div>
+  </section>
+
+  <p class="footer-note">Seu Lugar Publicador monta a capa, o carrossel e a legenda de cada imóvel, prontos para baixar e postar no Instagram.</p>
+</div>
+
+<div class="toast-wrap" id="toastWrap"></div>
+<div id="modalRoot"></div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Sortable/1.15.2/Sortable.min.js"></script>
+<script src="publicador.js"></script>
+</body>
+</html>

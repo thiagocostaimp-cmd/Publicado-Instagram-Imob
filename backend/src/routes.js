@@ -1,30 +1,13 @@
 const db = require("./db");
 const auth = require("./auth");
 const { setSessionCookie, clearSessionCookie } = require("./http-helpers");
+const { requireAuthUser: requireAuth } = require("./auth-helpers");
 
 function publicUser(user) {
   return { id: user.id, name: user.name, email: user.email, role: user.role };
 }
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-
-// Middleware (no sentido de "função que roda antes da rota") que exige login
-// válido. Lê o token do cookie (já colocado em req.sessionToken pelo server),
-// verifica a assinatura/validade, carrega o usuário do banco e guarda em
-// req.user para as rotas usarem.
-async function requireAuth(req, res) {
-  const payload = auth.verify(req.sessionToken);
-  if (!payload) {
-    res.json(401, { error: "Não autenticado." });
-    return null;
-  }
-  const user = await db.findUserById(payload.userId);
-  if (!user) {
-    res.json(401, { error: "Sessão inválida." });
-    return null;
-  }
-  return user;
-}
 
 function requireAdmin(user, res) {
   if (user.role !== "admin") {

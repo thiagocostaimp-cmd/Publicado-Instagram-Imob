@@ -59,6 +59,10 @@ const config = {
   // Postgres rodando na própria máquina (localhost) normalmente não tem SSL
   // configurado, então desligamos automaticamente nesse caso.
   databaseSsl: !databaseUrl.includes("localhost") && !databaseUrl.includes("127.0.0.1"),
+  // Usada pelo Seu Lugar Publicador para extrair dados de anúncios com IA.
+  // Sem essa variável, o botão "Extrair com IA" mostra um aviso claro em vez
+  // de quebrar. Gere uma chave em console.anthropic.com → API Keys.
+  anthropicApiKey: process.env.ANTHROPIC_API_KEY || "",
 };
 
 module.exports = config;

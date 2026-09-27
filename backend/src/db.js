@@ -35,6 +35,34 @@ async function init() {
       created_at TIMESTAMPTZ NOT NULL
     );
   `);
+
+  // "imoveis" e "publicador_config" guardam o essencial (id, dono, datas) em
+  // colunas de verdade, e o resto -- os muitos campos específicos de cada
+  // imóvel (quartos, preço, fotos do carrossel, hashtags...) -- num único
+  // JSONB. Esses campos mudam com frequência conforme o painel evolui, e um
+  // JSONB evita uma migração de banco a cada campo novo; a coluna
+  // organization_id garante que uma imobiliária nunca veja os imóveis de outra.
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS imoveis (
+      id TEXT PRIMARY KEY,
+      organization_id TEXT NOT NULL REFERENCES organizations(id),
+      data JSONB NOT NULL,
+      created_at TIMESTAMPTZ NOT NULL,
+      updated_at TIMESTAMPTZ NOT NULL
+    );
+  `);
+  await pool.query(`
+    CREATE INDEX IF NOT EXISTS imoveis_org_updated_idx
+      ON imoveis (organization_id, updated_at DESC);
+  `);
+
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS publicador_config (
+      organization_id TEXT PRIMARY KEY REFERENCES organizations(id),
+      data JSONB NOT NULL,
+      updated_at TIMESTAMPTZ NOT NULL
+    );
+  `);
 }
 
 function nowIso() {
@@ -127,6 +155,81 @@ async function deleteUser(id) {
   await pool.query("DELETE FROM users WHERE id = $1", [id]);
 }
 
+/* ============================================================
+   IMÓVEIS (Seu Lugar Publicador)
+   ============================================================ */
+function rowToImovel(row) {
+  if (!row) return null;
+  return Object.assign({ id: row.id }, row.data, {
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
+  });
+}
+
+async function listImoveis(organizationId) {
+  const result = await pool.query(
+    "SELECT * FROM imoveis WHERE organization_id = $1 ORDER BY updated_at DESC LIMIT 200",
+    [organizationId]
+  );
+  return result.rows.map(rowToImovel);
+}
+
+async function getImovel(organizationId, id) {
+  const result = await pool.query(
+    "SELECT * FROM imoveis WHERE id = $1 AND organization_id = $2",
+    [id, organizationId]
+  );
+  return rowToImovel(result.rows[0]);
+}
+
+// Cria (id vazio) ou substitui por completo (id de um imóvel já existente
+// desta organização) -- mesmo comportamento de "set" que o rascunho do
+// wizard espera ao salvar a cada etapa.
+async function saveImovel(organizationId, id, data) {
+  const now = nowIso();
+  const payload = Object.assign({}, data);
+  delete payload.id; delete payload.createdAt; delete payload.updatedAt;
+
+  if (id) {
+    const result = await pool.query(
+      "UPDATE imoveis SET data = $1, updated_at = $2 WHERE id = $3 AND organization_id = $4",
+      [payload, now, id, organizationId]
+    );
+    if (result.rowCount === 0) return null; // não existe (ou é de outra organização)
+    return getImovel(organizationId, id);
+  }
+
+  const newId = crypto.randomUUID();
+  await pool.query(
+    "INSERT INTO imoveis (id, organization_id, data, created_at, updated_at) VALUES ($1, $2, $3, $4, $4)",
+    [newId, organizationId, payload, now]
+  );
+  return getImovel(organizationId, newId);
+}
+
+async function deleteImovel(organizationId, id) {
+  await pool.query("DELETE FROM imoveis WHERE id = $1 AND organization_id = $2", [id, organizationId]);
+}
+
+/* ============================================================
+   CONFIGURAÇÃO DO PUBLICADOR (uma por organização)
+   ============================================================ */
+async function getPublicadorConfig(organizationId) {
+  const result = await pool.query(
+    "SELECT data FROM publicador_config WHERE organization_id = $1",
+    [organizationId]
+  );
+  return result.rows[0] ? result.rows[0].data : null;
+}
+
+async function savePublicadorConfig(organizationId, data) {
+  await pool.query(
+    `INSERT INTO publicador_config (organization_id, data, updated_at) VALUES ($1, $2, $3)
+     ON CONFLICT (organization_id) DO UPDATE SET data = $2, updated_at = $3`,
+    [organizationId, data, nowIso()]
+  );
+}
+
 module.exports = {
   init,
   createOrganizationWithAdmin,
@@ -136,4 +239,10 @@ module.exports = {
   listUsersByOrganization,
   createUser,
   deleteUser,
+  listImoveis,
+  getImovel,
+  saveImovel,
+  deleteImovel,
+  getPublicadorConfig,
+  savePublicadorConfig,
 };

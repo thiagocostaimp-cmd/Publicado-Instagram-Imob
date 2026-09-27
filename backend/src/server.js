@@ -12,10 +12,12 @@ const {
   SESSION_COOKIE,
 } = require("./http-helpers");
 const routes = require("./routes");
+const publicadorRoutes = require("./publicador-routes");
 const db = require("./db");
 
 const router = createRouter();
 routes.register(router);
+publicadorRoutes.register(router);
 
 // Em produção, o frontend (HTML/CSS/JS estático) é servido pelo mesmo
 // servidor da API -- assim só existe UM serviço para hospedar, sem CORS

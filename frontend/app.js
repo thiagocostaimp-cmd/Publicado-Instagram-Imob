@@ -99,6 +99,12 @@ document.getElementById("logout-btn").addEventListener("click", async () => {
 // ---- Navegação dentro do app ----
 document.querySelectorAll(".nav-btn").forEach((btn) => {
   btn.addEventListener("click", () => {
+    // "Publicador" é uma página separada (própria aplicação, com seu próprio
+    // JS grande) -- navega de verdade em vez de só trocar de aba dentro desta SPA.
+    if (btn.dataset.page === "publicador") {
+      window.location.href = "publicador.html";
+      return;
+    }
     document.querySelectorAll(".nav-btn").forEach((b) => b.classList.remove("active"));
     btn.classList.add("active");
     document.getElementById("page-dashboard").hidden = btn.dataset.page !== "dashboard";

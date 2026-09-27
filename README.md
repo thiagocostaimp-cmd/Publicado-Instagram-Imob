@@ -39,19 +39,24 @@ detecta sozinho que deve falar com a API em `localhost:4000`.
 ```
 backend/
   src/
-    server.js       -- servidor HTTP, roteamento e serve o frontend estático
-    routes.js        -- as rotas da API (registro, login, time...)
-    db.js             -- acesso ao banco (Postgres, via pacote "pg")
-    auth.js            -- hash de senha e token de sessão
-    http-helpers.js    -- cookies, CORS, leitura do corpo da requisição
-    router.js          -- roteador simples (sem Express)
-    config.js          -- variáveis de ambiente e geração do segredo do JWT
+    server.js             -- servidor HTTP, roteamento e serve o frontend estático
+    routes.js              -- rotas da API (registro, login, time...)
+    publicador-routes.js   -- rotas do Seu Lugar Publicador (imóveis, config, extração por IA)
+    auth-helpers.js         -- verificação de login, compartilhada pelas rotas acima
+    db.js                    -- acesso ao banco (Postgres, via pacote "pg")
+    auth.js                   -- hash de senha e token de sessão
+    http-helpers.js            -- cookies, CORS, leitura do corpo da requisição
+    router.js                  -- roteador simples (sem Express)
+    config.js                  -- variáveis de ambiente e geração do segredo do JWT
 frontend/
-  index.html            -- as três telas: login/registro, início, time
-  app.js                -- toda a lógica (chamadas à API, navegação)
+  index.html            -- painel principal: login/registro, início, time
+  app.js                -- lógica do painel principal
   style.css             -- visual com as cores da marca Seu Lugar
   config.js             -- endereço da API
-  serve.js              -- servidor estático simples
+  serve.js              -- servidor estático simples (só para desenvolvimento)
+  publicador.html       -- Seu Lugar Publicador: capa, carrossel e legenda dos imóveis
+  publicador.js         -- lógica do Publicador (canvas, upload pro Cloudinary, IA)
+  publicador.css        -- visual do Publicador
 ```
 
 ## O que já funciona
@@ -68,6 +73,12 @@ frontend/
   script malicioso).
 - Um administrador não consegue remover a própria conta por acidente pela
   tela de time (evita a organização ficar sem nenhum admin).
+- **Seu Lugar Publicador** (aba "Publicador"): monta a capa (feed + story),
+  o carrossel de fotos e a legenda de cada imóvel, com extração automática
+  dos dados por IA a partir do texto de um anúncio. Cada imobiliária
+  (organização) só vê os próprios imóveis. Precisa de duas contas gratuitas
+  configuradas em "Configurações" e nas variáveis de ambiente -- veja
+  "Indo para produção" abaixo.
 
 ## O que ainda falta (próximos passos naturais)
 
@@ -76,9 +87,11 @@ frontend/
    tela de "trocar minha senha" (rota autenticada) e um fluxo de
    recuperação por e-mail (precisa de um serviço de envio de e-mail, tipo
    Resend ou SendGrid).
-2. **Portar as telas do Seu Lugar Publicador** (extração por IA, geração de
-   capas, carrossel, publicação no Instagram) para dentro deste painel,
-   como novas páginas que só aparecem para quem está logado.
+2. **Publicar direto no Instagram**: hoje o Publicador só gera o conteúdo
+   para baixar e postar manualmente. Publicar automático exige a API do
+   Instagram (Meta Graph API) -- uma conta de desenvolvedor Meta, ligar a
+   Página do Facebook à conta comercial do Instagram, e implementar a
+   renovação do token de acesso.
 3. **Papéis mais específicos**, se um dia precisar de mais que só
    "admin" e "membro" (ex: financeiro, corretor).
 4. **Trocar a senha do JWT_SECRET / colocar rate limiting** -- veja
@@ -102,6 +115,17 @@ SQLite) e um único servidor Node que serve API + frontend juntos.
 - **Domínio e HTTPS**: o Render já entrega um endereço `https://` de graça
   (ex: `https://seulugar-saas.onrender.com`). Um domínio próprio
   (`app.seulugar.com.br`) pode ser configurado depois, no mesmo painel.
+- **Seu Lugar Publicador** precisa de duas peças extras:
+  - **Cloudinary** (guarda as imagens geradas -- capa, carrossel): crie uma
+    conta gratuita em [cloudinary.com](https://cloudinary.com), pegue o
+    "Cloud name" no painel principal e crie um "Upload preset" com
+    "Signing Mode: Unsigned" em Settings → Upload. Cole os dois valores na
+    aba "Configurações" do Publicador (fica salvo no banco, não é uma
+    variável de ambiente).
+  - **ANTHROPIC_API_KEY** (liga o botão "Extrair com IA"): gere uma chave em
+    [console.anthropic.com](https://console.anthropic.com) → API Keys, e
+    defina como variável de ambiente no Render. Sem ela, o resto do
+    Publicador funciona normalmente -- só esse botão mostra um aviso.
 
 ## Segurança -- pontos de atenção antes de ir ao ar com clientes reais
 
