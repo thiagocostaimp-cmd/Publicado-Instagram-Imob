@@ -377,13 +377,26 @@ async function composeCapa(format, img, dados, cores){
   ctx.font = "700 22px Poppins"; ctx.textAlign = "center"; ctx.fillStyle = WHITE;
   ctx.fillText((dados.metragem||0)+"m²", areaCenter, labelY);
 
+  // A caixinha da marca tem largura fixa (o resto do layout depende disso
+  // para se alinhar), mas o nome da marca e o slogan são texto livre digitado
+  // em Configurações -- podem ser mais compridos que "Seu Lugar" /
+  // "Imobiliária Descomplicada". fitText encolhe a fonte até caber; o clip()
+  // é uma segunda trava de segurança (nada desenha fora da caixinha branca,
+  // mesmo num caso extremo de uma palavra única enorme que não encolhe mais).
   const cardX = pad+specW+20, cardY = Y(1157.7), cardW = dim.w-pad-cardX, cardH = 100.3;
   fillRoundRect(ctx, cardX, cardY, cardW, cardH, 12, WHITE);
+  const cardTextMaxW = cardW - 16;
+  ctx.save();
+  roundedRectPath(ctx, cardX, cardY, cardW, cardH, 12);
+  ctx.clip();
   ctx.textAlign = "center"; ctx.textBaseline = "middle";
-  ctx.font = "800 26px Poppins"; ctx.fillStyle = RED;
+  ctx.fillStyle = RED;
+  fitText(ctx, (cfg.nome_marca||"Seu Lugar").toUpperCase(), cardTextMaxW, "Poppins", 800, 26, 11);
   ctx.fillText((cfg.nome_marca||"Seu Lugar").toUpperCase(), cardX+cardW/2, cardY+cardH*0.4);
-  ctx.font = "600 13px Inter"; ctx.fillStyle = "#4a4a4a";
+  ctx.fillStyle = "#4a4a4a";
+  fitText(ctx, cfg.slogan||"", cardTextMaxW, "Inter", 600, 13, 9);
   ctx.fillText(cfg.slogan||"", cardX+cardW/2, cardY+cardH*0.72);
+  ctx.restore();
 
   ctx.fillStyle = RED; ctx.fillRect(0, Y(1280.25), dim.w, 69.75);
 
