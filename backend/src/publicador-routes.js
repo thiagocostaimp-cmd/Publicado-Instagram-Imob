@@ -35,6 +35,7 @@ const DEFAULT_CONFIG = {
   instagram_username: "",
   cloudinary_cloud_name: "",
   cloudinary_upload_preset: "",
+  logo_url: "",
 };
 
 function register(router) {

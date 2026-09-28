@@ -46,7 +46,10 @@ const DEFAULT_CONFIG = {
   cta_final: "Comente \"Alugar\"",
   instagram_username: "",
   cloudinary_cloud_name: "",
-  cloudinary_upload_preset: ""
+  cloudinary_upload_preset: "",
+  // Logo da marca (opcional). Quando preenchido, a capa desenha essa imagem
+  // dentro da caixinha branca em vez do nome da marca escrito em texto.
+  logo_url: ""
 };
 
 const TIPOS_IMOVEL = ["Apartamento","Casa","Kitnet","Sobrado","Casa de Condomínio","Sala Comercial","Loja","Terreno"];
@@ -284,6 +287,25 @@ function ensureFontsLoaded(){
   return _fontsReadyPromise;
 }
 
+// Logo da marca (opcional), carregado de uma URL do Cloudinary. Cacheado por
+// URL -- a mesma capa pode ser gerada (feed + story) sem baixar o logo duas
+// vezes, e trocar o logo em Configurações naturalmente usa uma URL nova.
+// crossOrigin="anonymous" é obrigatório: sem isso, o navegador marca o
+// canvas como "tainted" (mesmo o Cloudinary enviando os cabeçalhos CORS
+// certos) e canvas.toBlob() para de funcionar silenciosamente.
+const _logoImgCache = {};
+function getLogoImage(url){
+  if (_logoImgCache[url]) return _logoImgCache[url];
+  _logoImgCache[url] = new Promise((resolve, reject)=>{
+    const img = new Image();
+    img.crossOrigin = "anonymous";
+    img.onload = ()=> resolve(img);
+    img.onerror = ()=> reject(new Error("Falha ao carregar o logo"));
+    img.src = url;
+  });
+  return _logoImgCache[url];
+}
+
 async function composeCapa(format, img, dados, cores){
   await Promise.all([ensureFontsLoaded(), ensureIconsLoaded()]);
   const dim = format === "story" ? DIM_STORY : DIM_FEED;
@@ -389,13 +411,29 @@ async function composeCapa(format, img, dados, cores){
   ctx.save();
   roundedRectPath(ctx, cardX, cardY, cardW, cardH, 12);
   ctx.clip();
-  ctx.textAlign = "center"; ctx.textBaseline = "middle";
-  ctx.fillStyle = RED;
-  fitText(ctx, (cfg.nome_marca||"Seu Lugar").toUpperCase(), cardTextMaxW, "Poppins", 800, 26, 11);
-  ctx.fillText((cfg.nome_marca||"Seu Lugar").toUpperCase(), cardX+cardW/2, cardY+cardH*0.4);
-  ctx.fillStyle = "#4a4a4a";
-  fitText(ctx, cfg.slogan||"", cardTextMaxW, "Inter", 600, 13, 9);
-  ctx.fillText(cfg.slogan||"", cardX+cardW/2, cardY+cardH*0.72);
+  let logoDesenhado = false;
+  if (cfg.logo_url){
+    try{
+      const logoImg = await getLogoImage(cfg.logo_url);
+      const logoPad = 12;
+      const maxW = cardW - logoPad*2, maxH = cardH - logoPad*2;
+      const scale = Math.min(maxW/logoImg.naturalWidth, maxH/logoImg.naturalHeight);
+      const lw = logoImg.naturalWidth*scale, lh = logoImg.naturalHeight*scale;
+      ctx.drawImage(logoImg, cardX+(cardW-lw)/2, cardY+(cardH-lh)/2, lw, lh);
+      logoDesenhado = true;
+    }catch(e){
+      console.warn("Não consegui carregar o logo, usando o nome da marca em texto.", e);
+    }
+  }
+  if (!logoDesenhado){
+    ctx.textAlign = "center"; ctx.textBaseline = "middle";
+    ctx.fillStyle = RED;
+    fitText(ctx, (cfg.nome_marca||"Seu Lugar").toUpperCase(), cardTextMaxW, "Poppins", 800, 26, 11);
+    ctx.fillText((cfg.nome_marca||"Seu Lugar").toUpperCase(), cardX+cardW/2, cardY+cardH*0.4);
+    ctx.fillStyle = "#4a4a4a";
+    fitText(ctx, cfg.slogan||"", cardTextMaxW, "Inter", 600, 13, 9);
+    ctx.fillText(cfg.slogan||"", cardX+cardW/2, cardY+cardH*0.72);
+  }
   ctx.restore();
 
   ctx.fillStyle = RED; ctx.fillRect(0, Y(1280.25), dim.w, 69.75);
@@ -1238,6 +1276,19 @@ function renderConfig(){
         '<div class="color-field"><input type="color" id="cCorPreto" value="'+cfg.cor_preto+'"><span class="hint">Escuro</span></div>'+
         '<div class="color-field"><input type="color" id="cCorBranco" value="'+cfg.cor_branco+'"><span class="hint">Claro</span></div>'+
       '</div>'+
+      '<label style="font-size:.8rem;font-weight:600;color:var(--text-muted);display:block;margin-top:18px;">Logo (opcional)</label>'+
+      '<p class="hint" style="margin:4px 0 10px;">Se você enviar um logo, ele substitui o nome da marca escrito em texto na caixinha da capa.</p>'+
+      '<div id="logoPreviewWrap" style="margin-bottom:10px;">'+
+        (cfg.logo_url
+          ? '<img src="'+cfg.logo_url+'" alt="Logo atual" style="max-height:60px;max-width:220px;border:1px solid var(--border);border-radius:8px;padding:6px;background:#fff;display:block;">'
+          : '<span class="hint">Nenhum logo enviado ainda -- a capa usa o nome da marca em texto.</span>')+
+      '</div>'+
+      '<div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;">'+
+        '<label class="btn btn-ghost btn-sm" for="cLogoInput" style="cursor:pointer;">'+(cfg.logo_url?"Trocar logo":"Enviar logo")+'</label>'+
+        '<input type="file" id="cLogoInput" accept="image/*" style="display:none;">'+
+        (cfg.logo_url ? '<button class="btn btn-ghost btn-sm" id="cLogoRemove" type="button">Remover logo</button>' : '')+
+        '<span id="logoUploadStatus" class="hint"></span>'+
+      '</div>'+
     '</div>'+
     '<div class="panel" style="margin-bottom:20px;">'+
       '<h3 style="margin-bottom:10px;">Armazenamento das imagens (Cloudinary)</h3>'+
@@ -1261,6 +1312,35 @@ function renderConfig(){
     '</div>'+
     '<button class="btn btn-primary btn-block" id="btnSalvarConfig">Salvar configurações</button>'+
     '<div id="configStatus"></div>';
+
+  const logoInput = body.querySelector("#cLogoInput");
+  if (logoInput){
+    logoInput.addEventListener("change", async (e)=>{
+      const file = e.target.files[0];
+      if (!file) return;
+      const statusEl = body.querySelector("#logoUploadStatus");
+      statusEl.textContent = "Enviando…";
+      try{
+        const asset = await AssetStore.uploadBlob(file);
+        cfg.logo_url = asset.url;
+        await Store.saveConfig(cfg);
+        toast("Logo enviado e salvo.");
+        renderConfig();
+      }catch(err){
+        statusEl.textContent = "";
+        toast(err.message || "Não foi possível enviar o logo.", true);
+      }
+    });
+  }
+  const logoRemoveBtn = body.querySelector("#cLogoRemove");
+  if (logoRemoveBtn){
+    logoRemoveBtn.addEventListener("click", async ()=>{
+      cfg.logo_url = "";
+      await Store.saveConfig(cfg);
+      toast("Logo removido -- a capa volta a usar o nome da marca em texto.");
+      renderConfig();
+    });
+  }
 
   function renderHashtagList(){
     const wrap = body.querySelector("#cHashtagList");
