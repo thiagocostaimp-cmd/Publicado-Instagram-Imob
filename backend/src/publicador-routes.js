@@ -92,6 +92,23 @@ function register(router) {
     return res.json(200, { ok: true });
   });
 
+  /* ---- Ler o link do anúncio automaticamente ---- */
+  router.post("/api/publicador/ler-link", async (req, res) => {
+    const user = await requireAuthUser(req, res);
+    if (!user) return;
+    const { link } = req.body || {};
+    if (!link || !/^https?:\/\/\S+/i.test(link)) {
+      return res.json(400, { error: "Informe um link válido (começando com http:// ou https://)." });
+    }
+    try {
+      const texto = await lerConteudoDaPagina(String(link));
+      return res.json(200, { texto });
+    } catch (err) {
+      console.error("Erro ao ler link:", err);
+      return res.json(502, { error: err.message || "Não foi possível ler essa página." });
+    }
+  });
+
   /* ---- Extração de dados por IA ---- */
   router.post("/api/publicador/extrair-ia", async (req, res) => {
     const user = await requireAuthUser(req, res);
@@ -113,6 +130,70 @@ function register(router) {
       return res.json(502, { error: "Não foi possível extrair os dados com IA. Tente novamente." });
     }
   });
+}
+
+// Busca a página do anúncio e devolve só o texto visível (sem tags, script,
+// style etc.), pronto para a IA ler. Não usa nenhum serviço pago -- é um
+// fetch simples com um User-Agent de navegador de verdade (muitos sites
+// bloqueiam o User-Agent padrão de bibliotecas/robôs). Funciona bem em sites
+// que renderizam o conteúdo no servidor; sites que só montam a página via
+// JavaScript no navegador (client-side rendering) não vão funcionar aqui --
+// nesse caso, a pessoa ainda pode copiar e colar o texto manualmente.
+async function lerConteudoDaPagina(url) {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 15000);
+  let resp;
+  try {
+    resp = await fetch(url, {
+      signal: controller.signal,
+      redirect: "follow",
+      headers: {
+        "User-Agent":
+          "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Safari/537.36",
+        "Accept-Language": "pt-BR,pt;q=0.9,en;q=0.8",
+        Accept: "text/html,application/xhtml+xml",
+      },
+    });
+  } catch (err) {
+    if (err.name === "AbortError") throw new Error("A página demorou demais para responder.");
+    throw new Error("Não consegui acessar esse link.");
+  } finally {
+    clearTimeout(timeout);
+  }
+  if (!resp.ok) {
+    throw new Error("A página respondeu com erro (HTTP " + resp.status + "). Alguns sites bloqueiam acesso automatizado -- copie o texto manualmente nesse caso.");
+  }
+  const contentType = resp.headers.get("content-type") || "";
+  if (!contentType.includes("text/html") && !contentType.includes("application/xhtml")) {
+    throw new Error("Esse link não parece apontar para uma página web (HTML).");
+  }
+  const html = await resp.text();
+  const texto = htmlParaTexto(html);
+  if (!texto || texto.length < 40) {
+    throw new Error("Não encontrei texto legível nessa página -- ela pode montar o conteúdo via JavaScript. Copie o texto manualmente.");
+  }
+  return texto.slice(0, 15000);
+}
+
+const HTML_ENTITIES = {
+  amp: "&", lt: "<", gt: ">", quot: '"', apos: "'", nbsp: " ",
+  aacute: "á", eacute: "é", iacute: "í", oacute: "ó", uacute: "ú",
+  atilde: "ã", otilde: "õ", ccedil: "ç", ecirc: "ê", ocirc: "ô",
+  Aacute: "Á", Eacute: "É", Iacute: "Í", Oacute: "Ó", Uacute: "Ú",
+  Atilde: "Ã", Otilde: "Õ", Ccedil: "Ç", Ecirc: "Ê", Ocirc: "Ô",
+};
+
+function htmlParaTexto(html) {
+  let text = html
+    .replace(/<!--[\s\S]*?-->/g, " ")
+    .replace(/<(script|style|noscript|svg)[^>]*>[\s\S]*?<\/\1>/gi, " ")
+    .replace(/<br\s*\/?>/gi, "\n")
+    .replace(/<\/(p|div|li|h[1-6]|tr)>/gi, "\n")
+    .replace(/<[^>]+>/g, " ")
+    .replace(/&#(\d+);/g, (m, code) => String.fromCodePoint(Number(code)))
+    .replace(/&(\w+);/g, (m, name) => (name in HTML_ENTITIES ? HTML_ENTITIES[name] : m));
+  text = text.replace(/[ \t]+/g, " ").replace(/\n\s*\n+/g, "\n\n").trim();
+  return text;
 }
 
 async function extrairComIA(textoBruto, linkOrigem) {
