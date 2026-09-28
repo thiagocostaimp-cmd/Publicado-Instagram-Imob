@@ -6,9 +6,11 @@
 //   - banco de dados do Artifact  -> tabelas "imoveis" e "publicador_config" (db.js)
 //   - armazenamento de imagens    -> Cloudinary, direto do navegador (não passa por aqui)
 //   - IA para extrair dados       -> API da Anthropic, chamada abaixo
-//   - publicar no Instagram       -> Instagram Graph API da Meta, chamada abaixo
-//     (antes usava um conector Zapier só disponível dentro do claude.ai)
+//   - publicar no Instagram       -> API do Instagram (login direto do Instagram,
+//     graph.instagram.com -- não a Graph API "clássica" via Página do Facebook),
+//     chamada abaixo. Antes usava um conector Zapier só disponível dentro do claude.ai.
 
+const GRAPH_API_HOST = "https://graph.instagram.com";
 const GRAPH_API_VERSION = "v21.0";
 const MAX_MIDIAS_POST_IG = 10; // limite do próprio Instagram por publicação
 
@@ -284,7 +286,7 @@ function htmlParaTexto(html) {
 // decodificado, ou lança um erro com a mensagem que a própria Meta devolveu
 // (geralmente já explica o problema: token expirado, mídia inválida etc.).
 async function chamarGraphAPI(path, params) {
-  const url = "https://graph.facebook.com/" + GRAPH_API_VERSION + path + "?" + new URLSearchParams(params).toString();
+  const url = GRAPH_API_HOST + "/" + GRAPH_API_VERSION + path + "?" + new URLSearchParams(params).toString();
   const resp = await fetch(url, { method: "POST" });
   const data = await resp.json().catch(() => ({}));
   if (!resp.ok || data.error) {
@@ -358,7 +360,7 @@ async function publicarNoInstagram(cfg, midias, legenda) {
   let permalink = null;
   try {
     const info = await fetch(
-      "https://graph.facebook.com/" + GRAPH_API_VERSION + "/" + mediaId + "?fields=permalink&access_token=" + encodeURIComponent(token)
+      GRAPH_API_HOST + "/" + GRAPH_API_VERSION + "/" + mediaId + "?fields=permalink&access_token=" + encodeURIComponent(token)
     ).then((r) => r.json());
     permalink = info.permalink || null;
   } catch (e) { /* link não é essencial -- segue sem ele se falhar */ }
