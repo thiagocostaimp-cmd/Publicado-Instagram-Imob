@@ -75,10 +75,12 @@ frontend/
   tela de time (evita a organização ficar sem nenhum admin).
 - **Seu Lugar Publicador** (aba "Publicador"): monta a capa (feed + story),
   o carrossel de fotos e a legenda de cada imóvel, com extração automática
-  dos dados por IA a partir do texto de um anúncio. Cada imobiliária
-  (organização) só vê os próprios imóveis. Precisa de duas contas gratuitas
-  configuradas em "Configurações" e nas variáveis de ambiente -- veja
-  "Indo para produção" abaixo.
+  dos dados por IA (a partir de texto colado ou de um link, lido pelo
+  próprio servidor) e publicação automática no Instagram via Instagram
+  Graph API. Cada imobiliária (organização) só vê os próprios imóveis.
+  Precisa de algumas contas gratuitas/pagas configuradas em
+  "Configurações" e nas variáveis de ambiente -- veja "Indo para
+  produção" abaixo.
 
 ## O que ainda falta (próximos passos naturais)
 
@@ -87,11 +89,13 @@ frontend/
    tela de "trocar minha senha" (rota autenticada) e um fluxo de
    recuperação por e-mail (precisa de um serviço de envio de e-mail, tipo
    Resend ou SendGrid).
-2. **Publicar direto no Instagram**: hoje o Publicador só gera o conteúdo
-   para baixar e postar manualmente. Publicar automático exige a API do
-   Instagram (Meta Graph API) -- uma conta de desenvolvedor Meta, ligar a
-   Página do Facebook à conta comercial do Instagram, e implementar a
-   renovação do token de acesso.
+2. **Renovar o token do Instagram automaticamente**: o token de acesso
+   (Page Access Token) configurado em Publicador → Configurações dura
+   bastante tempo, mas pode expirar um dia (ex: se a senha do Facebook
+   mudar, ou o acesso à Página for revogado). Quando isso acontecer, o
+   botão "Publicar no Instagram" volta a dar erro, e alguém precisa gerar
+   um token novo (mesmo processo do guia inicial) e colar de novo em
+   Configurações. Dá para automatizar essa renovação no futuro.
 3. **Papéis mais específicos**, se um dia precisar de mais que só
    "admin" e "membro" (ex: financeiro, corretor).
 4. **Trocar a senha do JWT_SECRET / colocar rate limiting** -- veja
@@ -126,6 +130,20 @@ SQLite) e um único servidor Node que serve API + frontend juntos.
     [console.anthropic.com](https://console.anthropic.com) → API Keys, e
     defina como variável de ambiente no Render. Sem ela, o resto do
     Publicador funciona normalmente -- só esse botão mostra um aviso.
+  - **Instagram Graph API** (liga a publicação automática): exige a conta
+    do Instagram ser Business/Creator e estar ligada a uma Página do
+    Facebook que você administra. Em
+    [developers.facebook.com](https://developers.facebook.com), crie um
+    app tipo "Business", adicione o produto "Instagram Graph API", e gere
+    um Page Access Token de longa duração com as permissões
+    `instagram_basic` e `instagram_content_publish` (o Graph API Explorer,
+    dentro do próprio site de desenvolvedores, é o jeito mais simples de
+    gerar isso). Cole o token e o ID da conta comercial do Instagram
+    (Instagram Business Account ID) na aba "Configurações" do Publicador
+    -- fica salvo no banco (nunca é reenviado de volta ao navegador depois
+    de salvo, por segurança). Esse token pode expirar eventualmente (ex:
+    troca de senha do Facebook) -- quando isso acontecer, gere um novo do
+    mesmo jeito.
 
 ## Segurança -- pontos de atenção antes de ir ao ar com clientes reais
 
