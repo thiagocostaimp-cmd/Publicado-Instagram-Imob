@@ -216,6 +216,26 @@ async function getImovel(organizationId, id) {
   return rowToImovel(result.rows[0]);
 }
 
+// Marca o imóvel como "publicando" só se ele AINDA não estiver nesse status
+// -- um UPDATE condicional (não um "ler depois escrever" separado) para que
+// duas pessoas clicando "Publicar no Instagram" ao mesmo tempo (ou um
+// duplo-clique) não passem as duas pela checagem e publiquem o mesmo
+// imóvel duas vezes. Devolve null quando outra requisição já reivindicou a
+// publicação primeiro (ou o imóvel não existe) -- a rota trata isso como
+// "já está publicando, aguarde".
+async function claimImovelForInstagramPublish(organizationId, id) {
+  const result = await pool.query(
+    `UPDATE imoveis
+     SET data = jsonb_set(data, '{instagram_status}', '"publicando"'::jsonb),
+         updated_at = now()
+     WHERE id = $1 AND organization_id = $2
+       AND coalesce(data->>'instagram_status', 'nenhum') <> 'publicando'
+     RETURNING *`,
+    [id, organizationId]
+  );
+  return rowToImovel(result.rows[0]);
+}
+
 // Cria (id vazio) ou substitui por completo (id de um imóvel já existente
 // desta organização) -- mesmo comportamento de "set" que o rascunho do
 // wizard espera ao salvar a cada etapa.
@@ -264,6 +284,22 @@ async function savePublicadorConfig(organizationId, data) {
   );
 }
 
+// Atualiza só os campos passados (mescla dentro do JSONB), em vez de
+// substituir a configuração inteira -- usada pela renovação automática do
+// token do Instagram, que roda como efeito colateral de um GET. Se ela
+// fizesse um "ler tudo, mudar um campo, salvar tudo de volta" (como
+// savePublicadorConfig faz), um POST de outra pessoa salvando uma mudança
+// de verdade (cor da marca, hashtags...) bem no meio desse intervalo seria
+// apagado por essa escrita -- a pessoa veria a configuração dela sumir sem
+// nenhum erro. Um merge parcial no próprio banco evita essa perda.
+async function mergePublicadorConfig(organizationId, partialData) {
+  await pool.query(
+    `UPDATE publicador_config SET data = data || $2::jsonb, updated_at = $3
+     WHERE organization_id = $1`,
+    [organizationId, JSON.stringify(partialData), nowIso()]
+  );
+}
+
 module.exports = {
   init,
   createOrganizationWithAdmin,
@@ -278,8 +314,10 @@ module.exports = {
   updatePasswordAndClearResetToken,
   listImoveis,
   getImovel,
+  claimImovelForInstagramPublish,
   saveImovel,
   deleteImovel,
   getPublicadorConfig,
   savePublicadorConfig,
+  mergePublicadorConfig,
 };

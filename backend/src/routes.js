@@ -5,6 +5,7 @@ const config = require("./config");
 const email = require("./email");
 const { setSessionCookie, clearSessionCookie } = require("./http-helpers");
 const { requireAuthUser: requireAuth, requireAdmin } = require("./auth-helpers");
+const { checkRateLimit, resetRateLimit } = require("./rate-limit");
 
 function publicUser(user) {
   return { id: user.id, name: user.name, email: user.email, role: user.role };
@@ -48,16 +49,30 @@ function register(router) {
   });
 
   router.post("/api/auth/login", async (req, res) => {
-    const { email, password } = req.body || {};
-    if (!email || !password) {
+    const { email: emailInformado, password } = req.body || {};
+    if (!emailInformado || !password) {
       return res.json(400, { error: "Informe e-mail e senha." });
     }
 
+    // Limita tentativas por e-mail (não por IP -- este servidor roda atrás
+    // do proxy do Render, então o IP de quem chegou até aqui já não é
+    // simples de confiar sem mais configuração). 10 tentativas erradas a
+    // cada 15 minutos é generoso pra alguém errando a senha de verdade, e
+    // já atrapalha bastante um script tentando adivinhar.
+    const rlKey = "login:" + emailInformado.toLowerCase();
+    const rl = checkRateLimit(rlKey, 10, 15 * 60 * 1000);
+    if (!rl.allowed) {
+      return res.json(429, {
+        error: "Muitas tentativas para este e-mail. Aguarde " + Math.ceil(rl.retryAfterSeconds / 60) + " minuto(s) e tente de novo.",
+      });
+    }
+
     const invalidMsg = "E-mail ou senha incorretos.";
-    const user = await db.findUserByEmail(email);
+    const user = await db.findUserByEmail(emailInformado);
     if (!user || !auth.verifyPassword(password, user.passwordHash)) {
       return res.json(401, { error: invalidMsg });
     }
+    resetRateLimit(rlKey); // login certo -- não deixa um erro de digitação antigo continuar contando
 
     const token = auth.sign({ userId: user.id });
     setSessionCookie(res.raw, token);
@@ -72,6 +87,15 @@ function register(router) {
     const { email: emailInformado } = req.body || {};
     if (!emailInformado || !EMAIL_RE.test(emailInformado)) {
       return res.json(400, { error: "Informe um e-mail válido." });
+    }
+    // No máximo 3 pedidos de redefinição por e-mail a cada 15 minutos --
+    // sem isso, alguém poderia usar este formulário pra encher a caixa de
+    // entrada de outra pessoa de e-mail de redefinição de senha.
+    const rl = checkRateLimit("esqueci-senha:" + emailInformado.toLowerCase(), 3, 15 * 60 * 1000);
+    if (!rl.allowed) {
+      return res.json(429, {
+        error: "Muitos pedidos para este e-mail. Aguarde " + Math.ceil(rl.retryAfterSeconds / 60) + " minuto(s) e tente de novo.",
+      });
     }
     const respostaGenerica = {
       ok: true,

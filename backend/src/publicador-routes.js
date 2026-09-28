@@ -80,11 +80,16 @@ async function talvezRenovarTokenInstagram(organizationId, cfg) {
     if (!resp.ok || !data.access_token) {
       throw new Error((data.error && data.error.message) || "resposta sem access_token");
     }
-    const novaConfig = Object.assign({}, cfg, {
+    const camposNovos = {
       instagram_access_token: data.access_token,
       instagram_access_token_updated_at: new Date().toISOString(),
-    });
-    await db.savePublicadorConfig(organizationId, novaConfig);
+    };
+    const novaConfig = Object.assign({}, cfg, camposNovos);
+    // Merge parcial (só esses 2 campos), não um save da config inteira --
+    // isso roda como efeito colateral de um GET, então não pode arriscar
+    // apagar por cima uma mudança de verdade que alguém salvou (POST) bem
+    // nesse meio-tempo.
+    await db.mergePublicadorConfig(organizationId, camposNovos);
     console.log("[instagram] token renovado automaticamente para a organização", organizationId);
     return novaConfig;
   } catch (err) {
@@ -190,6 +195,9 @@ function register(router) {
     if (!link || !/^https?:\/\/\S+/i.test(link)) {
       return res.json(400, { error: "Informe um link válido (começando com http:// ou https://)." });
     }
+    if (!ehUrlPublicaSegura(link)) {
+      return res.json(400, { error: "Esse link não pode ser lido automaticamente. Copie o texto da página e cole manualmente." });
+    }
     try {
       // Links do próprio sistema da imobiliária (app.seulugar.imb.br/property/<código>)
       // têm uma API pública por trás que devolve os dados já estruturados --
@@ -235,6 +243,15 @@ function register(router) {
     }
 
     const legenda = (imovel.legenda || "") + "\n\n" + (imovel.hashtags_selecionadas || []).join(" ");
+
+    // Reivindicação atômica: se duas requisições chegarem quase juntas (dois
+    // cliques, duas abas, duas pessoas), só a primeira consegue marcar como
+    // "publicando" -- a segunda recebe 409 em vez de publicar o mesmo
+    // imóvel duas vezes no Instagram.
+    const reivindicado = await db.claimImovelForInstagramPublish(user.organizationId, req.params.id);
+    if (!reivindicado) {
+      return res.json(409, { error: "Esse imóvel já está sendo publicado agora (por você ou outra pessoa) -- aguarde terminar." });
+    }
 
     try {
       const resultado = await publicarNoInstagram(cfg, midias, legenda);
@@ -358,6 +375,32 @@ async function buscarDadosEstruturadosSeuLugar(url) {
 // que renderizam o conteúdo no servidor; sites que só montam a página via
 // JavaScript no navegador (client-side rendering) não vão funcionar aqui --
 // nesse caso, a pessoa ainda pode copiar e colar o texto manualmente.
+// Quem usa "Ler automaticamente" é sempre uma pessoa autenticada do time
+// (não um estranho da internet), mas mesmo assim o servidor não deveria
+// aceitar buscar qualquer endereço que alguém cole -- sem essa checagem,
+// esse campo vira um jeito de fazer o próprio servidor consultar endereços
+// internos da rede onde ele roda. Bloqueia localhost, IPs privados/de
+// metadados de nuvem e qualquer coisa que não seja http(s) (a checagem já
+// feita antes disso cobre o esquema; aqui é só o host). Não resolve DNS
+// para checar o IP de verdade (isso pegaria também um domínio que só
+// aponta pra um IP privado) -- suficiente para o nível de risco aqui
+// (equipe já autenticada, não acesso anônimo), não para um cenário de
+// múltiplos clientes desconhecidos usando o mesmo servidor.
+function ehUrlPublicaSegura(url) {
+  let host;
+  try { host = new URL(url).hostname.toLowerCase(); } catch (e) { return false; }
+  if (host === "localhost" || host.endsWith(".localhost") || host === "0.0.0.0" || host === "::1") return false;
+  const partesIPv4 = host.match(/^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$/);
+  if (partesIPv4) {
+    const [a, b] = partesIPv4.slice(1, 3).map(Number);
+    if (a === 127 || a === 10 || a === 0) return false;
+    if (a === 169 && b === 254) return false; // link-local -- inclui metadados de nuvem (ex: 169.254.169.254)
+    if (a === 172 && b >= 16 && b <= 31) return false;
+    if (a === 192 && b === 168) return false;
+  }
+  return true;
+}
+
 async function lerConteudoDaPagina(url) {
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), 15000);

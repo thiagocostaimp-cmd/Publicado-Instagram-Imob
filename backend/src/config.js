@@ -29,9 +29,24 @@ loadDotEnv();
 // Se ninguém definiu JWT_SECRET (nem no ambiente, nem no .env), geramos um
 // valor aleatório na primeira execução e guardamos em backend/.jwt-secret,
 // para que reinicializações do mesmo servidor continuem usando o mesmo
-// segredo (senão todo mundo seria deslogado a cada restart).
+// segredo (senão todo mundo seria deslogado a cada restart). Esse arquivo
+// só é confiável em disco persistente -- em produção (NODE_ENV=production),
+// exigimos a variável de ambiente de verdade em vez de cair nesse arquivo:
+// numa hospedagem com disco temporário (ex: Render), o arquivo pode sumir
+// num reinício e gerar um segredo novo sem avisar ninguém, derrubando a
+// sessão de todo mundo silenciosamente. Preferível travar a inicialização
+// com uma mensagem clara a fazer isso escondido. (No render.yaml deste
+// projeto, JWT_SECRET já vem definido automaticamente -- generateValue.)
 function resolveJwtSecret() {
   if (process.env.JWT_SECRET) return process.env.JWT_SECRET;
+  if (process.env.NODE_ENV === "production") {
+    throw new Error(
+      "JWT_SECRET não está definido em produção. Defina essa variável de ambiente " +
+      "(ex: node -e \"console.log(require('crypto').randomBytes(48).toString('hex'))\") " +
+      "em vez de deixar o servidor gerar uma sozinho -- em produção isso pode se perder " +
+      "num reinício e deslogar todo mundo sem aviso."
+    );
+  }
   const secretFile = path.join(ROOT, ".jwt-secret");
   if (fs.existsSync(secretFile)) {
     return fs.readFileSync(secretFile, "utf8").trim();

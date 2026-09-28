@@ -224,6 +224,15 @@ function fmtDataCurta(iso){
 function escapeHtml(s){
   return String(s==null?"":s).replace(/[&<>"']/g, c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
 }
+// Para valores que viram atributo src=/href= (imagens, link do anúncio):
+// escapar HTML sozinho não impede um esquema tipo "javascript:" ou "data:"
+// de ser usado no lugar de uma URL de verdade. Como todo link/imagem que
+// este painel usa é sempre http(s) (Cloudinary, ou um link de anúncio
+// colado pela pessoa), qualquer outra coisa é tratada como inválida.
+function safeUrl(url){
+  const s = String(url||"").trim();
+  return /^https:\/\//i.test(s) || /^http:\/\//i.test(s) ? escapeHtml(s) : "";
+}
 
 /* ============================================================
    CANVAS COMPOSITION -- feed / story / carrossel / cta
@@ -668,7 +677,7 @@ function buildImovelCard(item){
   card.innerHTML =
     '<div class="card-thumb">'+
       (item.capa_feed_url
-        ? '<img src="'+item.capa_feed_url+'" alt="">'
+        ? '<img src="'+safeUrl(item.capa_feed_url)+'" alt="">'
         : '<div class="placeholder"><svg width="22" height="22" viewBox="0 0 24 24" fill="none"><path d="M4 16l4.5-4.5a2 2 0 0 1 2.8 0L15 15m0 0l1.5-1.5a2 2 0 0 1 2.8 0L21 16M4 8h16M4 4h16v16H4V4z" stroke="currentColor" stroke-width="1.3"/></svg>sem capa</div>') +
       '<span class="badge '+statusClass+'">'+statusLabel+'</span>'+
     '</div>'+
@@ -677,11 +686,11 @@ function buildImovelCard(item){
       '<div class="card-sub">'+escapeHtml(item.codigo_unico ? "#"+item.codigo_unico : "sem código")+' · '+escapeHtml(item.cidade_estado||"")+'</div>'+
       '<div class="card-price">R$ '+fmtMoney(item.valor_aluguel)+'/mês</div>'+
       '<div class="card-date">'+dataLinha+'</div>'+
-      (item.link_origem ? '<a href="'+escapeHtml(item.link_origem)+'" target="_blank" rel="noopener" class="card-link">🔗 Anúncio original</a>' : '')+
+      (item.link_origem ? '<a href="'+safeUrl(item.link_origem)+'" target="_blank" rel="noopener" class="card-link">🔗 Anúncio original</a>' : '')+
       (item.instagram_status==="publicado" ? '<div class="card-ig-line" style="color:var(--success);">✓ Publicado no Instagram</div>'
         : item.instagram_status==="erro" ? '<div class="card-ig-line" style="color:var(--red);">⚠️ Erro ao publicar</div>'
         : '')+
-      (item.instagram_status==="publicado" && item.instagram_permalink ? '<a href="'+escapeHtml(item.instagram_permalink)+'" target="_blank" rel="noopener" class="card-link">📷 Ver no Instagram</a>' : '')+
+      (item.instagram_status==="publicado" && item.instagram_permalink ? '<a href="'+safeUrl(item.instagram_permalink)+'" target="_blank" rel="noopener" class="card-link">📷 Ver no Instagram</a>' : '')+
       '<div class="card-actions">'+
         '<button class="btn btn-ghost btn-sm" style="flex:1;" data-act="edit" data-id="'+item.id+'">Continuar</button>'+
         '<button class="btn btn-danger btn-sm" data-act="del" data-id="'+item.id+'">Excluir</button>'+
@@ -986,8 +995,8 @@ function renderStepCapa(panel){
   if (draft.capa_feed_url && draft.capa_story_url && !capaFotoObj){
     genArea.innerHTML =
       '<div class="preview-grid">'+
-        '<div class="preview-card"><div class="label">Feed (1080×1350)</div><img src="'+draft.capa_feed_url+'"></div>'+
-        '<div class="preview-card"><div class="label">Story (1080×1920)</div><img src="'+draft.capa_story_url+'"></div>'+
+        '<div class="preview-card"><div class="label">Feed (1080×1350)</div><img src="'+safeUrl(draft.capa_feed_url)+'"></div>'+
+        '<div class="preview-card"><div class="label">Story (1080×1920)</div><img src="'+safeUrl(draft.capa_story_url)+'"></div>'+
       '</div>'+
       '<div style="margin-top:16px;"><button class="btn btn-ghost btn-sm" id="btnRegen">Gerar novamente</button></div>';
     genArea.querySelector("#btnRegen").addEventListener("click", renderGenButton);
@@ -1083,7 +1092,7 @@ function renderStepCarrossel(panel){
     carrosselFotos.forEach((f,i)=>{
       const el = document.createElement("div");
       el.className = "thumb-item";
-      el.innerHTML = '<img src="'+f.url+'"><span class="ord">'+(i+1)+'</span><button class="rm" data-i="'+i+'">✕</button>'+
+      el.innerHTML = '<img src="'+safeUrl(f.url)+'"><span class="ord">'+(i+1)+'</span><button class="rm" data-i="'+i+'">✕</button>'+
         (arrastarDisponivel ? '<span class="drag-handle">⠿ arraste</span>' : '<div class="mv"><button data-mv="up" data-i="'+i+'">↑</button><button data-mv="down" data-i="'+i+'">↓</button></div>');
       wrap.appendChild(el);
     });
@@ -1149,7 +1158,7 @@ function renderStepCarrossel(panel){
       resultWrap.innerHTML = "";
       uploaded.forEach((u,i)=>{
         const t = document.createElement("div"); t.className="thumb-item";
-        t.innerHTML = '<img src="'+u.url+'"><span class="ord">'+(i+1)+'</span>';
+        t.innerHTML = '<img src="'+safeUrl(u.url)+'"><span class="ord">'+(i+1)+'</span>';
         resultWrap.appendChild(t);
       });
       draft.fotos_carrossel = uploaded;
@@ -1327,14 +1336,25 @@ function renderStepPublicar(panel){
       igBody.innerHTML =
         '<div class="ig-badge ig-badge-success">✓ Publicado'+(draft.instagram_publicado_em?(" — "+fmtDataCurta(draft.instagram_publicado_em)):"")+'</div>'+
         '<div style="display:flex;gap:10px;flex-wrap:wrap;margin-top:12px;">'+
-          (draft.instagram_permalink ? '<a href="'+escapeHtml(draft.instagram_permalink)+'" target="_blank" rel="noopener" class="btn btn-ghost btn-sm">Ver post no Instagram ↗</a>' : '')+
+          (draft.instagram_permalink ? '<a href="'+safeUrl(draft.instagram_permalink)+'" target="_blank" rel="noopener" class="btn btn-ghost btn-sm">Ver post no Instagram ↗</a>' : '')+
           '<button class="btn btn-ghost btn-sm" id="btnIgRepublicar">Publicar novamente</button>'+
         '</div>';
       igBody.querySelector("#btnIgRepublicar").addEventListener("click", solicitarPublicacaoIg);
       return;
     }
     if (st === "publicando"){
-      igBody.innerHTML = '<div class="ig-badge ig-badge-pending"><div class="spinner"></div>Publicando…</div><p class="hint" style="margin-top:10px;">Isso pode levar até um minuto -- a Meta processa as imagens antes de publicar.</p>';
+      igBody.innerHTML =
+        '<div class="ig-badge ig-badge-pending"><div class="spinner"></div>Publicando…</div>'+
+        '<p class="hint" style="margin-top:10px;">Isso pode levar até um minuto -- a Meta processa as imagens antes de publicar. Se ficar assim por muito tempo (conexão caiu no meio, por exemplo), clique para verificar de novo.</p>'+
+        '<div style="margin-top:10px;"><button class="btn btn-ghost btn-sm" id="btnIgAtualizar">Verificar status</button></div>';
+      igBody.querySelector("#btnIgAtualizar").addEventListener("click", async ()=>{
+        try{
+          const fresh = await Store.getImovel(draftId);
+          if (fresh) Object.assign(draft, fresh);
+        }catch(e){ /* mantém o que já tinha na tela */ }
+        renderChecklist();
+        renderIgBody();
+      });
       return;
     }
     if (st === "erro"){
@@ -1349,7 +1369,7 @@ function renderStepPublicar(panel){
     const excedeuLimite = totalMidias > 10;
     igBody.innerHTML =
       '<div style="display:flex;gap:14px;align-items:center;flex-wrap:wrap;">'+
-        '<img src="'+draft.capa_feed_url+'" alt="" class="ig-photo-preview">'+
+        '<img src="'+safeUrl(draft.capa_feed_url)+'" alt="" class="ig-photo-preview">'+
         '<div style="flex:1;min-width:200px;">'+
           '<div class="ig-badge '+(excedeuLimite?"ig-badge-warn":"ig-badge-pending")+'" style="margin-bottom:8px;">'+(excedeuLimite?"Limite de fotos excedido":"Pronto para publicar")+'</div>'+
           '<button class="btn btn-primary" id="btnIgPublicar"'+(excedeuLimite?" disabled":"")+'>📸 Publicar no Instagram agora</button>'+
@@ -1371,17 +1391,35 @@ function renderStepPublicar(panel){
     if (!ok) return;
     // Salva o estado atual (legenda/hashtags podem ter sido editadas nesta
     // tela) antes de publicar -- o backend publica o que está gravado no
-    // banco, não o que está só na tela.
-    await persistDraft({ instagram_status: "publicando", instagram_erro_msg: "" });
+    // banco, não o que está só na tela. O status "publicando" é marcado
+    // pelo PRÓPRIO backend, de forma atômica, dentro da rota de publicar --
+    // não aqui -- assim, duas pessoas clicando ao mesmo tempo (ou um
+    // duplo-clique) não conseguem as duas passar e publicar o mesmo imóvel
+    // duas vezes; a segunda recebe um erro de conflito (409).
+    await persistDraft();
+    draft.instagram_status = "publicando";
+    draft.instagram_erro_msg = "";
     renderIgBody();
     try{
       const atualizado = await Store.publicarInstagram(draftId);
       Object.assign(draft, atualizado);
       toast("Publicado no Instagram!");
     }catch(err){
-      draft.instagram_status = "erro";
-      draft.instagram_erro_msg = err.message || "Não foi possível publicar.";
-      toast("Não foi possível publicar — veja o erro abaixo.", true);
+      // Em caso de conflito (409), outra requisição já está com a
+      // publicação em andamento -- não sobrescreve o status dela aqui.
+      // Nos demais erros, o próprio backend já grava "erro" no banco antes
+      // de responder; buscamos o imóvel de novo pra refletir exatamente o
+      // que ficou salvo, em vez de arriscar divergir do servidor.
+      toast(err.message || "Não foi possível publicar — veja o erro abaixo.", true);
+      try{
+        const fresh = await Store.getImovel(draftId);
+        if (fresh) Object.assign(draft, fresh);
+      }catch(e2){
+        if (err.status !== 409){
+          draft.instagram_status = "erro";
+          draft.instagram_erro_msg = err.message || "Não foi possível publicar.";
+        }
+      }
     }
     renderChecklist();
     renderIgBody();
@@ -1459,7 +1497,7 @@ function renderConfig(){
       '<p class="hint" style="margin:4px 0 10px;">Se você enviar um logo, ele substitui o nome da marca escrito em texto na caixinha da capa.</p>'+
       '<div id="logoPreviewWrap" style="margin-bottom:10px;">'+
         (cfg.logo_url
-          ? '<img src="'+cfg.logo_url+'" alt="Logo atual" style="max-height:60px;max-width:220px;border:1px solid var(--border);border-radius:8px;padding:6px;background:#fff;display:block;">'
+          ? '<img src="'+safeUrl(cfg.logo_url)+'" alt="Logo atual" style="max-height:60px;max-width:220px;border:1px solid var(--border);border-radius:8px;padding:6px;background:#fff;display:block;">'
           : '<span class="hint">Nenhum logo enviado ainda -- a capa usa o nome da marca em texto.</span>')+
       '</div>'+
       '<div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;">'+

@@ -160,14 +160,55 @@ SQLite) e um único servidor Node que serve API + frontend juntos.
     uns registros DNS) e defina `RESEND_FROM` com um remetente desse
     domínio (ex: `Seu Lugar <nao-responda@seulugar.imb.br>`).
 
-## Segurança -- pontos de atenção antes de ir ao ar com clientes reais
+## Segurança -- auditoria feita antes dos testes reais com o time
 
-- Troque o `JWT_SECRET` gerado automaticamente por um valor fixo definido
-  como variável de ambiente em produção (senão, reiniciar o servidor sem
-  essa variável derruba a sessão de todo mundo, e rodar mais de uma
-  instância do servidor ao mesmo tempo quebra, porque cada uma geraria um
-  segredo diferente).
-- Ative `NODE_ENV=production` em produção -- isso faz o cookie de sessão
-  exigir HTTPS.
-- Considere um limite de tentativas de login (rate limiting) para
-  dificultar tentativas de adivinhar senha.
+O projeto passou por uma auditoria de segurança e confiabilidade (código
+inteiro, não só o último commit) antes de liberar para o time comercial
+usar de verdade. Achados corrigidos:
+
+- **XSS armazenado no Publicador**: URLs de imagem (capa, carrossel, logo)
+  e o link do anúncio eram inseridos direto no HTML da tela sem
+  escapar/validar. Corrigido -- todo valor assim agora passa por
+  `escapeHtml`/`safeUrl` (que também recusa qualquer coisa que não seja
+  `http://`/`https://`, bloqueando esquemas como `javascript:`).
+- **SSRF em "Ler automaticamente"**: a rota que busca a página de um link
+  aceitava qualquer endereço, incluindo IPs internos/privados. Corrigido
+  -- `ehUrlPublicaSegura()` recusa localhost e faixas de IP privado antes
+  de buscar.
+- **Publicação duplicada no Instagram**: dois cliques (ou duas pessoas)
+  quase ao mesmo tempo podiam publicar o mesmo imóvel duas vezes.
+  Corrigido -- a rota agora reivindica o imóvel com um UPDATE condicional
+  atômico antes de publicar; quem chega depois recebe um erro de
+  conflito (409) em vez de publicar de novo.
+- **Tela travada em "Publicando…"**: se a conexão caísse no meio de uma
+  publicação, não havia como sair dali. Corrigido -- botão "Verificar
+  status" sempre disponível nesse estado.
+- **Perda de configuração**: a renovação automática do token do
+  Instagram (que roda como efeito colateral de abrir Configurações)
+  salvava a configuração inteira de volta, podendo apagar por cima uma
+  mudança que outra pessoa tivesse acabado de salvar. Corrigido -- agora
+  só os 2 campos do token são mesclados no banco, não a configuração
+  inteira.
+- **Força bruta de login / spam de e-mail**: não existia limite de
+  tentativas. Corrigido -- `/api/auth/login` aceita 10 tentativas
+  erradas por e-mail a cada 15 minutos, e `/api/auth/esqueci-senha`
+  aceita 3 pedidos por e-mail a cada 15 minutos (em memória, sem precisar
+  de serviço externo).
+- **`JWT_SECRET` ausente em produção**: antes, se essa variável não
+  estivesse definida, o servidor gerava uma sozinha e salvava num arquivo
+  local -- que pode não sobreviver a um reinício em hospedagem com disco
+  temporário, deslogando todo mundo silenciosamente. Corrigido -- em
+  produção (`NODE_ENV=production`), o servidor agora recusa iniciar sem
+  `JWT_SECRET` definida como variável de ambiente de verdade (já é o caso
+  neste projeto, via `render.yaml`).
+
+Pontos que continuam como decisão consciente pra depois (não bloqueiam
+começar a usar com o time, mas valem lembrar):
+
+- O limite de tentativas é por processo (reinicia zerado a cada deploy) e
+  por e-mail, não por IP -- suficiente para um time pequeno, não para um
+  ataque distribuído de verdade.
+- A checagem de SSRF é por nome do host, não resolve DNS de verdade --
+  cobre o caso comum, não um ataque avançado de DNS rebinding.
+- Ative `NODE_ENV=production` em produção (já ativo neste projeto) --
+  isso faz o cookie de sessão exigir HTTPS.
