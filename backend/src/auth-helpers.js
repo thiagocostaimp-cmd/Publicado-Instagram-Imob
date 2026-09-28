@@ -19,4 +19,12 @@ async function requireAuthUser(req, res) {
   return user;
 }
 
-module.exports = { requireAuthUser };
+function requireAdmin(user, res) {
+  if (user.role !== "admin") {
+    res.json(403, { error: "Apenas administradores podem fazer isso." });
+    return false;
+  }
+  return true;
+}
+
+module.exports = { requireAuthUser, requireAdmin };

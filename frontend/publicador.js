@@ -1410,6 +1410,10 @@ function renderStepPublicar(panel){
    ============================================================ */
 function renderConfig(){
   const body = document.getElementById("configBody");
+  if (!isAdmin){
+    body.innerHTML = '<div class="empty-state"><h3>Só administradores</h3><p>Peça para um administrador da imobiliária mexer nas configurações do Publicador.</p></div>';
+    return;
+  }
   body.innerHTML =
     '<div class="panel" style="margin-bottom:20px;">'+
       '<h3 style="margin-bottom:16px;">Marca</h3>'+
@@ -1563,10 +1567,22 @@ function renderConfig(){
 /* ============================================================
    BOOT
    ============================================================ */
+let isAdmin = false;
+
 async function boot(){
   // Exige login -- reaproveita a mesma sessão (cookie) do painel principal.
-  try{ await api("/api/auth/me"); }
+  let me;
+  try{ me = await api("/api/auth/me"); }
   catch(e){ window.location.href = "index.html"; return; }
+  isAdmin = me.user && me.user.role === "admin";
+  // Só admin mexe em Configurações (token do Instagram, Cloudinary, IA...) --
+  // membros continuam usando o resto do Publicador normalmente. O backend
+  // também recusa a gravação para quem não é admin; isto aqui é só a tela
+  // nem mostrar a opção pra quem não pode usá-la.
+  if (!isAdmin){
+    const btnConfig = document.querySelector('.tab-btn[data-view="config"]');
+    if (btnConfig) btnConfig.hidden = true;
+  }
 
   ensureFontsLoaded(); ensureIconsLoaded();
   try{ cfg = await Store.getConfig(); }catch(e){ cfg = Object.assign({}, DEFAULT_CONFIG); }

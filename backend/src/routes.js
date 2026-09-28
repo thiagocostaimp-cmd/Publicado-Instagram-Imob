@@ -4,21 +4,13 @@ const auth = require("./auth");
 const config = require("./config");
 const email = require("./email");
 const { setSessionCookie, clearSessionCookie } = require("./http-helpers");
-const { requireAuthUser: requireAuth } = require("./auth-helpers");
+const { requireAuthUser: requireAuth, requireAdmin } = require("./auth-helpers");
 
 function publicUser(user) {
   return { id: user.id, name: user.name, email: user.email, role: user.role };
 }
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-
-function requireAdmin(user, res) {
-  if (user.role !== "admin") {
-    res.json(403, { error: "Apenas administradores podem fazer isso." });
-    return false;
-  }
-  return true;
-}
 
 function register(router) {
   // Cria a imobiliária (organização) e a primeira conta, que é sempre admin.

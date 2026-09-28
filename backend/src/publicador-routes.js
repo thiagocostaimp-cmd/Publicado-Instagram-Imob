@@ -17,7 +17,7 @@ const MAX_MIDIAS_POST_IG = 10; // limite do próprio Instagram por publicação
 const Anthropic = require("@anthropic-ai/sdk");
 const db = require("./db");
 const config = require("./config");
-const { requireAuthUser } = require("./auth-helpers");
+const { requireAuthUser, requireAdmin } = require("./auth-helpers");
 
 const anthropic = config.anthropicApiKey ? new Anthropic({ apiKey: config.anthropicApiKey }) : null;
 
@@ -162,6 +162,7 @@ function register(router) {
   router.post("/api/publicador/config", async (req, res) => {
     const user = await requireAuthUser(req, res);
     if (!user) return;
+    if (!requireAdmin(user, res)) return;
     const body = Object.assign({}, req.body || {});
     delete body.instagram_access_token_configurado; // campo só de leitura, nunca deve ser salvo
     const existing = await db.getPublicadorConfig(user.organizationId);

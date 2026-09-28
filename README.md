@@ -90,13 +90,21 @@ frontend/
   Precisa de algumas contas gratuitas/pagas configuradas em
   "Configurações" e nas variáveis de ambiente -- veja "Indo para
   produção" abaixo.
+- **Configurações do Publicador é só para administrador**: qualquer
+  pessoa do time cria/edita imóveis e publica no Instagram normalmente,
+  mas só administrador consegue ver ou alterar o token do Instagram, as
+  chaves do Cloudinary e as demais configurações sensíveis (o backend
+  recusa a gravação mesmo que alguém tente chamar a rota direto, não é só
+  a tela escondendo o botão).
 
 ## O que ainda falta (próximos passos naturais)
 
-1. **Papéis mais específicos**, se um dia precisar de mais que só
-   "admin" e "membro" (ex: financeiro, corretor).
-4. **Trocar a senha do JWT_SECRET / colocar rate limiting** -- veja
+1. **Trocar a senha do JWT_SECRET / colocar rate limiting** -- veja
    "Segurança" abaixo.
+2. **Papéis mais granulares que admin/membro** (ex: corretor só vê os
+   próprios imóveis, financeiro), se um dia o time crescer o bastante
+   para precisar disso -- hoje qualquer membro vê e edita todos os
+   imóveis da imobiliária.
 
 ## Indo para produção (Postgres + hospedagem)
 
