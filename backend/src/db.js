@@ -32,9 +32,15 @@ async function init() {
       password_hash TEXT NOT NULL,
       role TEXT NOT NULL DEFAULT 'member',
       organization_id TEXT NOT NULL REFERENCES organizations(id),
-      created_at TIMESTAMPTZ NOT NULL
+      created_at TIMESTAMPTZ NOT NULL,
+      reset_token_hash TEXT,
+      reset_token_expires_at TIMESTAMPTZ
     );
   `);
+  // Coluna nova em bancos que já existiam antes desta versão (IF NOT EXISTS
+  // faz o CREATE TABLE acima não fazer nada numa tabela que já existe).
+  await pool.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS reset_token_hash TEXT;`);
+  await pool.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS reset_token_expires_at TIMESTAMPTZ;`);
 
   // "imoveis" e "publicador_config" guardam o essencial (id, dono, datas) em
   // colunas de verdade, e o resto -- os muitos campos específicos de cada
@@ -155,6 +161,34 @@ async function deleteUser(id) {
   await pool.query("DELETE FROM users WHERE id = $1", [id]);
 }
 
+// Guarda o HASH do token de redefinição de senha (nunca o token em si --
+// mesmo raciocínio de nunca guardar senha em texto puro: se o banco
+// vazasse, ninguém conseguiria usar os hashes para redefinir a senha de
+// alguém). expiresAt limita quanto tempo o link do e-mail continua válido.
+async function setResetToken(userId, tokenHash, expiresAt) {
+  await pool.query(
+    "UPDATE users SET reset_token_hash = $1, reset_token_expires_at = $2 WHERE id = $3",
+    [tokenHash, expiresAt, userId]
+  );
+}
+
+async function findUserByValidResetTokenHash(tokenHash) {
+  const result = await pool.query(
+    "SELECT * FROM users WHERE reset_token_hash = $1 AND reset_token_expires_at > now()",
+    [tokenHash]
+  );
+  return rowToUser(result.rows[0]);
+}
+
+// Troca a senha e invalida o token na mesma operação -- um link de
+// redefinição só pode ser usado uma vez.
+async function updatePasswordAndClearResetToken(userId, passwordHash) {
+  await pool.query(
+    "UPDATE users SET password_hash = $1, reset_token_hash = NULL, reset_token_expires_at = NULL WHERE id = $2",
+    [passwordHash, userId]
+  );
+}
+
 /* ============================================================
    IMÓVEIS (Seu Lugar Publicador)
    ============================================================ */
@@ -239,6 +273,9 @@ module.exports = {
   listUsersByOrganization,
   createUser,
   deleteUser,
+  setResetToken,
+  findUserByValidResetTokenHash,
+  updatePasswordAndClearResetToken,
   listImoveis,
   getImovel,
   saveImovel,

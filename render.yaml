@@ -15,3 +15,9 @@ services:
         sync: false
       - key: ANTHROPIC_API_KEY
         sync: false
+      - key: RESEND_API_KEY
+        sync: false
+      - key: RESEND_FROM
+        value: "Seu Lugar <onboarding@resend.dev>"
+      - key: PUBLIC_URL
+        value: https://seulugar-saas.onrender.com

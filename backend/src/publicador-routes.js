@@ -47,7 +47,55 @@ const DEFAULT_CONFIG = {
   // redactConfig() abaixo.
   instagram_business_account_id: "",
   instagram_access_token: "",
+  // Quando o token foi definido/renovado pela última vez -- usado para saber
+  // quando é hora de renovar sozinho (ver talvezRenovarTokenInstagram).
+  instagram_access_token_updated_at: "",
 };
+
+// O token de acesso do Instagram (API "com login do Instagram") dura ~60
+// dias e pode ser renovado a qualquer momento depois de passar 24h da
+// última renovação, ganhando outros ~60 dias -- sem precisar que ninguém
+// gere um token novo na mão. Como este servidor roda no plano gratuito do
+// Render (que "dorme" sem uso, então um cron job de verdade não é confiável
+// aqui), a renovação acontece de um jeito mais simples: sempre que alguém
+// abre a tela de Configurações do Publicador (o que uma equipe de vendas
+// ativa faz com frequência de sobra), verificamos se já faz tempo desde a
+// última renovação e, se sim, renovamos na hora. Foi escolhida uma margem
+// de 45 dias (bem antes dos 60) para sobrar folga mesmo em períodos de
+// pouco uso do painel.
+const INSTAGRAM_TOKEN_RENOVAR_APOS_DIAS = 45;
+
+async function talvezRenovarTokenInstagram(organizationId, cfg) {
+  if (!cfg.instagram_access_token) return cfg;
+  const atualizadoEm = cfg.instagram_access_token_updated_at ? new Date(cfg.instagram_access_token_updated_at) : null;
+  const dias = atualizadoEm ? (Date.now() - atualizadoEm.getTime()) / 86400000 : Infinity;
+  if (dias < INSTAGRAM_TOKEN_RENOVAR_APOS_DIAS) return cfg;
+
+  try {
+    const resp = await fetch(
+      GRAPH_API_HOST + "/refresh_access_token?grant_type=ig_refresh_token&access_token=" +
+      encodeURIComponent(cfg.instagram_access_token)
+    );
+    const data = await resp.json().catch(() => ({}));
+    if (!resp.ok || !data.access_token) {
+      throw new Error((data.error && data.error.message) || "resposta sem access_token");
+    }
+    const novaConfig = Object.assign({}, cfg, {
+      instagram_access_token: data.access_token,
+      instagram_access_token_updated_at: new Date().toISOString(),
+    });
+    await db.savePublicadorConfig(organizationId, novaConfig);
+    console.log("[instagram] token renovado automaticamente para a organização", organizationId);
+    return novaConfig;
+  } catch (err) {
+    // Não derruba a tela por causa disso -- só loga. Se o token realmente
+    // tiver expirado (ninguém abriu o painel por mais de 60 dias seguidos),
+    // a publicação volta a falhar com uma mensagem clara, e alguém precisa
+    // gerar um token novo manualmente (mesmo processo do guia inicial).
+    console.error("[instagram] falha ao renovar token automaticamente:", err.message);
+    return cfg;
+  }
+}
 
 // O token de acesso do Instagram é um segredo (quem tiver ele consegue
 // publicar na conta de verdade) -- nunca devolvemos o valor guardado para o
@@ -106,7 +154,8 @@ function register(router) {
     const user = await requireAuthUser(req, res);
     if (!user) return;
     const saved = await db.getPublicadorConfig(user.organizationId);
-    const merged = Object.assign({}, DEFAULT_CONFIG, saved || {});
+    let merged = Object.assign({}, DEFAULT_CONFIG, saved || {});
+    merged = await talvezRenovarTokenInstagram(user.organizationId, merged);
     return res.json(200, { config: redactConfig(merged) });
   });
 
@@ -115,13 +164,18 @@ function register(router) {
     if (!user) return;
     const body = Object.assign({}, req.body || {});
     delete body.instagram_access_token_configurado; // campo só de leitura, nunca deve ser salvo
+    const existing = await db.getPublicadorConfig(user.organizationId);
     if (!body.instagram_access_token) {
       // Não veio um token novo no formulário -- preserva o que já estava
       // guardado, em vez de apagar (o navegador nunca recebe o valor real
       // de volta, então "em branco" aqui normalmente só significa "a pessoa
       // não mexeu nesse campo", não "quero remover o token").
-      const existing = await db.getPublicadorConfig(user.organizationId);
       body.instagram_access_token = (existing && existing.instagram_access_token) || "";
+      body.instagram_access_token_updated_at = (existing && existing.instagram_access_token_updated_at) || "";
+    } else {
+      // Token novo digitado por alguém -- reinicia a contagem dos 45 dias
+      // para a renovação automática.
+      body.instagram_access_token_updated_at = new Date().toISOString();
     }
     await db.savePublicadorConfig(user.organizationId, body);
     return res.json(200, { ok: true });
@@ -159,7 +213,8 @@ function register(router) {
     if (!imovel) return res.json(404, { error: "Imóvel não encontrado." });
 
     const saved = await db.getPublicadorConfig(user.organizationId);
-    const cfg = Object.assign({}, DEFAULT_CONFIG, saved || {});
+    let cfg = Object.assign({}, DEFAULT_CONFIG, saved || {});
+    cfg = await talvezRenovarTokenInstagram(user.organizationId, cfg);
     if (!cfg.instagram_access_token || !cfg.instagram_business_account_id) {
       return res.json(400, {
         error: "Configure o token de acesso e o ID da conta do Instagram em Configurações antes de publicar.",

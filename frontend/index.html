@@ -30,6 +30,16 @@
         </label>
         <button type="submit" class="btn btn-primary">Entrar</button>
         <p class="hint">Use o e-mail e a senha que o administrador da sua imobiliária criou para você.</p>
+        <p class="hint"><a href="#" id="link-esqueci-senha">Esqueci minha senha</a></p>
+      </form>
+
+      <form id="forgot-form" hidden>
+        <p class="hint">Informe o e-mail da sua conta -- se existir, mandamos um link para você criar uma senha nova.</p>
+        <label>E-mail
+          <input type="email" id="forgot-email" required autocomplete="username" />
+        </label>
+        <button type="submit" class="btn btn-primary">Enviar link de redefinição</button>
+        <p class="hint"><a href="#" id="link-voltar-login">&larr; Voltar para o login</a></p>
       </form>
 
       <form id="register-form" hidden>

@@ -1,0 +1,74 @@
+<!doctype html>
+<html lang="pt-br">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Seu Lugar &middot; Nova senha</title>
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <section id="auth-view">
+    <div class="auth-card">
+      <h1 class="brand">Seu<span class="accent">Lugar</span></h1>
+      <p class="subtitle">Criar uma senha nova</p>
+
+      <div id="reset-error" class="error-msg" hidden></div>
+      <div id="reset-ok" class="hint" hidden></div>
+
+      <form id="reset-form">
+        <label>Nova senha
+          <input type="password" id="reset-password" required minlength="8" autocomplete="new-password" />
+        </label>
+        <label>Confirme a nova senha
+          <input type="password" id="reset-password-confirm" required minlength="8" autocomplete="new-password" />
+        </label>
+        <button type="submit" class="btn btn-primary">Salvar nova senha</button>
+      </form>
+      <p class="hint"><a href="index.html">&larr; Voltar para o login</a></p>
+    </div>
+  </section>
+
+  <script src="config.js"></script>
+  <script>
+    const API_BASE = window.API_BASE;
+    const params = new URLSearchParams(location.search);
+    const token = params.get("token");
+    const form = document.getElementById("reset-form");
+    const errEl = document.getElementById("reset-error");
+    const okEl = document.getElementById("reset-ok");
+
+    if (!token) {
+      form.hidden = true;
+      errEl.hidden = false;
+      errEl.textContent = "Link inválido -- peça um novo em \"Esqueci minha senha\", na tela de login.";
+    }
+
+    form.addEventListener("submit", async (e) => {
+      e.preventDefault();
+      errEl.hidden = true;
+      const p1 = document.getElementById("reset-password").value;
+      const p2 = document.getElementById("reset-password-confirm").value;
+      if (p1 !== p2) {
+        errEl.hidden = false;
+        errEl.textContent = "As senhas não são iguais.";
+        return;
+      }
+      try {
+        const res = await fetch(`${API_BASE}/api/auth/redefinir-senha`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ token, password: p1 }),
+        });
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok) throw new Error(data.error || "Não foi possível redefinir a senha.");
+        form.hidden = true;
+        okEl.hidden = false;
+        okEl.textContent = "Senha alterada! Já pode entrar com a senha nova.";
+      } catch (err) {
+        errEl.hidden = false;
+        errEl.textContent = err.message;
+      }
+    });
+  </script>
+</body>
+</html>

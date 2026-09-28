@@ -73,6 +73,15 @@ frontend/
   script malicioso).
 - Um administrador não consegue remover a própria conta por acidente pela
   tela de time (evita a organização ficar sem nenhum admin).
+- **"Esqueci minha senha"**: link na tela de login manda um e-mail (via
+  Resend) com um link de redefinição, válido por 1 hora e de uso único. O
+  token nunca fica salvo em texto puro no banco (mesmo esquema de hash já
+  usado pra senha).
+- O token de acesso do Instagram (usado para publicar automaticamente) se
+  **renova sozinho** -- toda vez que alguém abre Publicador →
+  Configurações (ou tenta publicar um imóvel), o servidor verifica se já
+  faz tempo desde a última renovação e renova na hora, sem precisar que
+  ninguém gere um token novo manualmente.
 - **Seu Lugar Publicador** (aba "Publicador"): monta a capa (feed + story),
   o carrossel de fotos e a legenda de cada imóvel, com extração automática
   dos dados por IA (a partir de texto colado ou de um link, lido pelo
@@ -84,19 +93,7 @@ frontend/
 
 ## O que ainda falta (próximos passos naturais)
 
-1. **Trocar a senha / "esqueci minha senha"**: hoje só o administrador
-   define a senha inicial de cada pessoa. Depois, dá para adicionar uma
-   tela de "trocar minha senha" (rota autenticada) e um fluxo de
-   recuperação por e-mail (precisa de um serviço de envio de e-mail, tipo
-   Resend ou SendGrid).
-2. **Renovar o token do Instagram automaticamente**: o token de acesso
-   (Page Access Token) configurado em Publicador → Configurações dura
-   bastante tempo, mas pode expirar um dia (ex: se a senha do Facebook
-   mudar, ou o acesso à Página for revogado). Quando isso acontecer, o
-   botão "Publicar no Instagram" volta a dar erro, e alguém precisa gerar
-   um token novo (mesmo processo do guia inicial) e colar de novo em
-   Configurações. Dá para automatizar essa renovação no futuro.
-3. **Papéis mais específicos**, se um dia precisar de mais que só
+1. **Papéis mais específicos**, se um dia precisar de mais que só
    "admin" e "membro" (ex: financeiro, corretor).
 4. **Trocar a senha do JWT_SECRET / colocar rate limiting** -- veja
    "Segurança" abaixo.
@@ -130,20 +127,30 @@ SQLite) e um único servidor Node que serve API + frontend juntos.
     [console.anthropic.com](https://console.anthropic.com) → API Keys, e
     defina como variável de ambiente no Render. Sem ela, o resto do
     Publicador funciona normalmente -- só esse botão mostra um aviso.
-  - **Instagram Graph API** (liga a publicação automática): exige a conta
-    do Instagram ser Business/Creator e estar ligada a uma Página do
-    Facebook que você administra. Em
+  - **API do Instagram** (liga a publicação automática): exige a conta do
+    Instagram ser Business/Creator. Em
     [developers.facebook.com](https://developers.facebook.com), crie um
-    app tipo "Business", adicione o produto "Instagram Graph API", e gere
-    um Page Access Token de longa duração com as permissões
-    `instagram_basic` e `instagram_content_publish` (o Graph API Explorer,
-    dentro do próprio site de desenvolvedores, é o jeito mais simples de
-    gerar isso). Cole o token e o ID da conta comercial do Instagram
-    (Instagram Business Account ID) na aba "Configurações" do Publicador
-    -- fica salvo no banco (nunca é reenviado de volta ao navegador depois
-    de salvo, por segurança). Esse token pode expirar eventualmente (ex:
-    troca de senha do Facebook) -- quando isso acontecer, gere um novo do
-    mesmo jeito.
+    app tipo "Business" e adicione o produto "API do Instagram" (a versão
+    com login direto do Instagram -- endpoints em `graph.instagram.com`,
+    tokens começando com `IGAA`; não é a Graph API "clássica" via Página
+    do Facebook). A própria tela de configuração do produto, dentro do
+    site de desenvolvedores, tem a opção de gerar o token direto. Cole o
+    token e o ID da conta comercial do Instagram na aba "Configurações"
+    do Publicador -- fica salvo no banco (nunca é reenviado de volta ao
+    navegador depois de salvo, por segurança). O token dura cerca de 60
+    dias e **se renova sozinho** (o servidor renova automaticamente
+    sempre que alguém usa o painel) -- só se ninguém abrir o Publicador
+    por mais de ~60 dias seguidos é que ele expira de vez, exigindo gerar
+    um novo do mesmo jeito.
+  - **Resend** (liga o "Esqueci minha senha"): crie uma conta gratuita em
+    [resend.com](https://resend.com) e gere uma API key em API Keys. Sem
+    verificar um domínio próprio na conta Resend, o remetente padrão
+    (`onboarding@resend.dev`) só consegue entregar e-mail para o endereço
+    cadastrado na sua própria conta Resend -- funciona para testar, mas
+    não entrega para o time inteiro. Para isso funcionar com todo mundo,
+    verifique um domínio seu em Resend (Domains → Add Domain, apontando
+    uns registros DNS) e defina `RESEND_FROM` com um remetente desse
+    domínio (ex: `Seu Lugar <nao-responda@seulugar.imb.br>`).
 
 ## Segurança -- pontos de atenção antes de ir ao ar com clientes reais
 

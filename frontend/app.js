@@ -31,6 +31,7 @@ const appView = document.getElementById("app-view");
 const authError = document.getElementById("auth-error");
 const loginForm = document.getElementById("login-form");
 const registerForm = document.getElementById("register-form");
+const forgotForm = document.getElementById("forgot-form");
 
 let currentUser = null;
 
@@ -48,7 +49,37 @@ document.querySelectorAll(".tab-btn").forEach((btn) => {
     const isLogin = btn.dataset.tab === "login";
     loginForm.hidden = !isLogin;
     registerForm.hidden = isLogin;
+    forgotForm.hidden = true;
   });
+});
+
+document.getElementById("link-esqueci-senha").addEventListener("click", (e) => {
+  e.preventDefault();
+  showAuthError("");
+  loginForm.hidden = true;
+  registerForm.hidden = true;
+  forgotForm.hidden = false;
+});
+document.getElementById("link-voltar-login").addEventListener("click", (e) => {
+  e.preventDefault();
+  showAuthError("");
+  forgotForm.hidden = true;
+  loginForm.hidden = false;
+});
+
+forgotForm.addEventListener("submit", async (e) => {
+  e.preventDefault();
+  showAuthError("");
+  const emailEl = document.getElementById("forgot-email");
+  try {
+    const { message } = await api("/api/auth/esqueci-senha", {
+      method: "POST",
+      body: { email: emailEl.value.trim() },
+    });
+    forgotForm.innerHTML = '<p class="hint">' + message + "</p>";
+  } catch (err) {
+    showAuthError(err.message);
+  }
 });
 
 loginForm.addEventListener("submit", async (e) => {

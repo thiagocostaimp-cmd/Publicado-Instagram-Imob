@@ -63,6 +63,17 @@ const config = {
   // Sem essa variável, o botão "Extrair com IA" mostra um aviso claro em vez
   // de quebrar. Gere uma chave em console.anthropic.com → API Keys.
   anthropicApiKey: process.env.ANTHROPIC_API_KEY || "",
+  // Usadas pelo fluxo de "esqueci minha senha" (envio de e-mail via Resend).
+  // Sem RESEND_API_KEY, o botão mostra um aviso em vez de quebrar. O
+  // endereço em RESEND_FROM precisa ser de um domínio verificado na conta
+  // Resend (ou o domínio de testes deles, que só entrega pro seu próprio
+  // e-mail cadastrado lá -- ok para testar, não para o time inteiro).
+  resendApiKey: process.env.RESEND_API_KEY || "",
+  resendFrom: process.env.RESEND_FROM || "Seu Lugar <onboarding@resend.dev>",
+  // Endereço público do próprio frontend, usado para montar o link de
+  // redefinição de senha dentro do e-mail (ex: https://seulugar-saas.onrender.com).
+  // Sem essa variável, cai no endereço do Render que já configuramos.
+  publicUrl: process.env.PUBLIC_URL || "https://seulugar-saas.onrender.com",
 };
 
 module.exports = config;

@@ -1458,7 +1458,11 @@ function renderConfig(){
         '<div class="field"><label>ID da conta comercial do Instagram</label><input type="text" id="cIgBizId" value="'+escapeHtml(cfg.instagram_business_account_id||"")+'" placeholder="ex: 17841400000000000"></div>'+
         '<div class="field"><label>Token de acesso (Page Access Token)</label><input type="password" id="cIgToken" value="" placeholder="'+(cfg.instagram_access_token_configurado ? "•••••••• (já configurado -- deixe em branco pra manter)" : "cole o token aqui")+'"></div>'+
       '</div>'+
-      '<p class="hint" id="cIgTokenStatus">'+(cfg.instagram_access_token_configurado ? "✓ Token já configurado neste servidor." : "Nenhum token configurado ainda.")+'</p>'+
+      '<p class="hint" id="cIgTokenStatus">'+(
+        cfg.instagram_access_token_configurado
+          ? "✓ Token configurado" + (cfg.instagram_access_token_updated_at ? " -- renovado pela última vez em "+fmtDataCurta(cfg.instagram_access_token_updated_at)+" (o sistema renova sozinho a cada ~45 dias, sem precisar mexer aqui)." : ".")
+          : "Nenhum token configurado ainda."
+      )+'</p>'+
     '</div>'+
     '<div class="panel" style="margin-bottom:20px;">'+
       '<h3 style="margin-bottom:10px;">Modelo de legenda</h3>'+
