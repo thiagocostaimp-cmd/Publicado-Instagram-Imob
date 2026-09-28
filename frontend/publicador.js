@@ -4,9 +4,8 @@
 //   - banco de dados do Artifact   -> API deste backend (Store, abaixo)
 //   - armazenamento de imagens     -> upload direto (sem assinatura) pro Cloudinary
 //   - IA para extrair dados        -> POST /api/publicador/extrair-ia (API da Anthropic no backend)
-// A leitura automática do link do anúncio e a publicação automática no
-// Instagram (que usavam conectores só disponíveis dentro do claude.ai) ficam
-// de fora por enquanto -- ver README.
+//   - ler o link do anúncio        -> POST /api/publicador/ler-link (fetch no backend + IA)
+//   - publicar no Instagram        -> POST /api/imoveis/:id/publicar-instagram (Instagram Graph API no backend)
 (function () {
 "use strict";
 
@@ -29,6 +28,30 @@ async function api(path, options = {}) {
   }
   return data;
 }
+
+/* ============================================================
+   Tema claro/escuro (cada pessoa escolhe o seu, lembrado neste navegador --
+   mesma chave usada pelo painel principal, então o tema fica consistente
+   entre as duas telas).
+   ============================================================ */
+(function initTheme(){
+  const THEME_KEY = "seulugar_theme";
+  const btn = document.getElementById("theme-toggle-pub");
+  function applyIcon(){
+    const isDark = document.documentElement.getAttribute("data-theme") === "dark"
+      || (!document.documentElement.hasAttribute("data-theme") && window.matchMedia("(prefers-color-scheme: dark)").matches);
+    btn.textContent = isDark ? "☀️" : "🌙";
+  }
+  btn.addEventListener("click", ()=>{
+    const current = document.documentElement.getAttribute("data-theme")
+      || (window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light");
+    const next = current === "dark" ? "light" : "dark";
+    document.documentElement.setAttribute("data-theme", next);
+    try{ localStorage.setItem(THEME_KEY, next); }catch(e){ /* ok seguir sem lembrar */ }
+    applyIcon();
+  });
+  applyIcon();
+})();
 
 /* ============================================================
    CONSTANTS & DEFAULTS

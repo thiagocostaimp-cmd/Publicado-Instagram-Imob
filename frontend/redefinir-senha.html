@@ -5,9 +5,20 @@
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>Seu Lugar &middot; Nova senha</title>
   <link rel="stylesheet" href="style.css" />
+  <script>
+    (function () {
+      try {
+        var t = localStorage.getItem("seulugar_theme");
+        if (t === "dark" || t === "light") document.documentElement.setAttribute("data-theme", t);
+      } catch (e) { /* segue no tema padrão */ }
+    })();
+  </script>
 </head>
 <body>
   <section id="auth-view">
+    <div class="auth-card-top">
+      <button type="button" id="theme-toggle-reset" class="theme-toggle" title="Alternar tema claro/escuro">🌙</button>
+    </div>
     <div class="auth-card">
       <h1 class="brand">Seu<span class="accent">Lugar</span></h1>
       <p class="subtitle">Criar uma senha nova</p>
@@ -30,6 +41,24 @@
 
   <script src="config.js"></script>
   <script>
+    (function () {
+      const THEME_KEY = "seulugar_theme";
+      function applyIcon() {
+        const isDark = document.documentElement.getAttribute("data-theme") === "dark"
+          || (!document.documentElement.hasAttribute("data-theme") && window.matchMedia("(prefers-color-scheme: dark)").matches);
+        document.getElementById("theme-toggle-reset").textContent = isDark ? "☀️" : "🌙";
+      }
+      document.getElementById("theme-toggle-reset").addEventListener("click", () => {
+        const current = document.documentElement.getAttribute("data-theme")
+          || (window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light");
+        const next = current === "dark" ? "light" : "dark";
+        document.documentElement.setAttribute("data-theme", next);
+        try { localStorage.setItem(THEME_KEY, next); } catch (e) { /* ok */ }
+        applyIcon();
+      });
+      applyIcon();
+    })();
+
     const API_BASE = window.API_BASE;
     const params = new URLSearchParams(location.search);
     const token = params.get("token");

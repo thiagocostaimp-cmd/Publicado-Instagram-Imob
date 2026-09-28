@@ -9,6 +9,14 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@500;600;700;800&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@500;700&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="publicador.css" />
+  <script>
+    (function () {
+      try {
+        var t = localStorage.getItem("seulugar_theme");
+        if (t === "dark" || t === "light") document.documentElement.setAttribute("data-theme", t);
+      } catch (e) { /* segue no tema padrão */ }
+    })();
+  </script>
 </head>
 <body>
 
@@ -28,6 +36,7 @@
         <button class="tab-btn active" data-view="dashboard">Imóveis</button>
         <button class="tab-btn" data-view="config">Configurações</button>
       </div>
+      <button type="button" id="theme-toggle-pub" class="theme-toggle" title="Alternar tema claro/escuro">🌙</button>
       <a href="index.html" class="back-link">← Voltar ao painel</a>
     </div>
   </div>

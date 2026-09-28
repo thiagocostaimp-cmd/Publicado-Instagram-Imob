@@ -25,6 +25,25 @@ async function api(path, options = {}) {
   return data;
 }
 
+// ---- Tema claro/escuro (cada pessoa escolhe o seu, lembrado neste navegador) ----
+const THEME_KEY = "seulugar_theme";
+function applyThemeIcon() {
+  const isDark = document.documentElement.getAttribute("data-theme") === "dark"
+    || (!document.documentElement.hasAttribute("data-theme") && window.matchMedia("(prefers-color-scheme: dark)").matches);
+  const icon = isDark ? "☀️" : "🌙";
+  document.querySelectorAll(".theme-toggle").forEach((btn) => { btn.textContent = icon; });
+}
+function toggleTheme() {
+  const current = document.documentElement.getAttribute("data-theme")
+    || (window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light");
+  const next = current === "dark" ? "light" : "dark";
+  document.documentElement.setAttribute("data-theme", next);
+  try { localStorage.setItem(THEME_KEY, next); } catch (e) { /* ok seguir sem lembrar */ }
+  applyThemeIcon();
+}
+document.querySelectorAll(".theme-toggle").forEach((btn) => btn.addEventListener("click", toggleTheme));
+applyThemeIcon();
+
 // ---- Elementos ----
 const authView = document.getElementById("auth-view");
 const appView = document.getElementById("app-view");

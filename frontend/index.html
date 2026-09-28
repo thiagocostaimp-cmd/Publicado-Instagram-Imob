@@ -5,11 +5,24 @@
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>Seu Lugar &middot; Painel</title>
   <link rel="stylesheet" href="style.css" />
+  <script>
+    // Aplica o tema salvo antes da página desenhar, pra não piscar claro e
+    // depois escurecer (ou vice-versa) no primeiro instante da tela.
+    (function () {
+      try {
+        var t = localStorage.getItem("seulugar_theme");
+        if (t === "dark" || t === "light") document.documentElement.setAttribute("data-theme", t);
+      } catch (e) { /* localStorage indisponível -- segue no tema padrão do sistema */ }
+    })();
+  </script>
 </head>
 <body>
 
   <!-- Tela de login / criação da conta da imobiliária -->
   <section id="auth-view">
+    <div class="auth-card-top">
+      <button type="button" id="theme-toggle-auth" class="theme-toggle" title="Alternar tema claro/escuro">🌙</button>
+    </div>
     <div class="auth-card">
       <h1 class="brand">Seu<span class="accent">Lugar</span></h1>
       <p class="subtitle">Imobiliária Descomplicada &mdash; painel do time</p>
@@ -75,6 +88,7 @@
         <span>&middot;</span>
         <span id="who-name"></span>
         <span id="who-role" class="badge-role"></span>
+        <button type="button" id="theme-toggle-app" class="theme-toggle" title="Alternar tema claro/escuro">🌙</button>
         <button type="button" id="logout-btn" class="btn btn-secondary" style="padding:4px 10px;font-size:0.78rem;">Sair</button>
       </div>
     </header>
@@ -114,7 +128,7 @@
             </label>
             <button type="submit" class="btn btn-primary">Adicionar</button>
           </form>
-          <p class="hint">A pessoa pode (e deve) trocar essa senha depois -- essa tela ainda não tem "esqueci minha senha"; veja o README para adicionar isso.</p>
+          <p class="hint">A pessoa pode trocar essa senha depois usando "Esqueci minha senha" na tela de login.</p>
         </div>
       </section>
     </main>
