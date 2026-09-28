@@ -136,6 +136,13 @@ function register(router) {
       return res.json(400, { error: "Informe um link válido (começando com http:// ou https://)." });
     }
     try {
+      // Links do próprio sistema da imobiliária (app.seulugar.imb.br/property/<código>)
+      // têm uma API pública por trás que devolve os dados já estruturados --
+      // muito mais rápido e confiável que ler a página (que nesse site é só
+      // uma casca em branco montada via JavaScript) e mandar pra IA adivinhar.
+      const direto = await buscarDadosEstruturadosSeuLugar(String(link));
+      if (direto) return res.json(200, direto);
+
       const texto = await lerConteudoDaPagina(String(link));
       return res.json(200, { texto });
     } catch (err) {
@@ -215,6 +222,77 @@ function register(router) {
       return res.json(502, { error: "Não foi possível extrair os dados com IA. Tente novamente." });
     }
   });
+}
+
+// URL de um imóvel no próprio backoffice da Seu Lugar (app.seulugar.imb.br/
+// property/<código>). Essa página é montada inteira por JavaScript (React) --
+// um fetch simples só pega a casca vazia, sem nenhum dado do imóvel. Só que
+// por trás existe uma API pública (sem login) que devolve o imóvel já
+// estruturado, encontrada olhando o próprio código-fonte do site (arquivo
+// static/js/*.chunk.js, função "getPropertyPublicByCode"). Usar essa API
+// direto é bem mais rápido e confiável que ler o texto da página e mandar
+// pra IA tentar adivinhar os números -- e não gasta chamada de IA nenhuma.
+const SEULUGAR_PROPERTY_URL_RE = /^https?:\/\/app\.seulugar\.imb\.br\/property\/([a-zA-Z0-9._-]+)/i;
+const SEULUGAR_API_BASE = "https://api.seulugar.imb.br/stage/api/v1/real-estate/get/public";
+
+// Amostra pequena de valores já vistos no campo "type" da API, para quando o
+// início do título (mais confiável -- é texto em português de verdade,
+// escrito por alguém do time) não bater com nenhum dos nossos tipos.
+const SEULUGAR_TYPE_MAP = {
+  HOUSE: "Casa", APARTMENT: "Apartamento", KITNET: "Kitnet", STUDIO: "Kitnet",
+  SOBRADO: "Sobrado", COMMERCIAL_ROOM: "Sala Comercial", STORE: "Loja", LAND: "Terreno",
+};
+
+async function buscarDadosEstruturadosSeuLugar(url) {
+  const m = url.match(SEULUGAR_PROPERTY_URL_RE);
+  if (!m) return null;
+  const codigo = m[1];
+
+  let resp;
+  try {
+    resp = await fetch(SEULUGAR_API_BASE + "/code/" + encodeURIComponent(codigo));
+  } catch (e) {
+    return null; // API fora do ar ou inacessível -- cai no scraping genérico
+  }
+  if (!resp.ok) return null; // ex: código não encontrado -- cai no fallback também
+  let data;
+  try {
+    data = await resp.json();
+  } catch (e) {
+    return null;
+  }
+  if (!data || !data.features) return null;
+
+  const f = data.features;
+  const addr = data.address || {};
+  const titulo = String(data.title || "");
+  // O início do título já vem em português, escrito por gente da equipe
+  // ("Casa com 3 dormitórios...", "Apartamento no..."), o que costuma ser
+  // mais confiável que o enum interno do sistema (data.type).
+  const tipoPorTitulo = Object.keys(SEULUGAR_TYPE_MAP)
+    .map((k) => SEULUGAR_TYPE_MAP[k])
+    .find((rotulo) => titulo.toLowerCase().startsWith(rotulo.toLowerCase()));
+  const tipo_imovel = tipoPorTitulo || SEULUGAR_TYPE_MAP[data.type] || "Apartamento";
+
+  const dados = {
+    tipo_imovel,
+    bairro: addr.district || "",
+    cidade_estado: addr.city ? addr.city + (addr.state ? "/" + addr.state : "") : "",
+    numero_quartos: Number(f.rooms) || 0,
+    numero_banheiros: Number(f.bathrooms) || 0,
+    numero_vagas: Number(f.parkingSpaces) || 0,
+    numero_cozinhas: Number(f.kitchens) || 1,
+    metragem: Number(f.usefulArea || f.footage) || 0,
+    valor_aluguel: Number(f.rentPrice) || 0,
+    valor_condominio: Number(f.condominiumValue) || 0,
+    valor_iptu: Number(f.iptu) || 0,
+    codigo_unico: data.code || data.codigoImovel || codigo,
+  };
+
+  const descricaoTexto = data.description ? htmlParaTexto(data.description) : "";
+  const texto = [titulo, descricaoTexto].filter(Boolean).join("\n\n").slice(0, 15000);
+
+  return { texto, dados };
 }
 
 // Busca a página do anúncio e devolve só o texto visível (sem tags, script,

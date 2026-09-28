@@ -845,18 +845,17 @@ function wizardNav(panel, {backLabel, nextLabel, onBack, onNext, nextDisabled}){
 function renderStepExtrair(panel){
   panel.innerHTML =
     '<h3 style="margin-bottom:6px;">Extrair dados do imóvel</h3>'+
-    '<p style="color:var(--text-muted);font-size:.87rem;margin-bottom:18px;">Cole a descrição do imóvel (CRM, anúncio ou texto do site) e deixe a IA preencher os campos — ou pule direto para o preenchimento manual.</p>'+
+    '<p style="color:var(--text-muted);font-size:.87rem;margin-bottom:18px;">Cole o link do anúncio (ou a descrição, se preferir) e deixe a IA preencher os campos — ou pule direto para o preenchimento manual.</p>'+
     '<div class="field"><label>Código do imóvel (opcional)</label><input type="text" id="fCodigo" value="'+escapeHtml(draft.codigo_unico)+'" placeholder="Ex: AP-1042"></div>'+
     '<div class="field"><label>Link do anúncio (opcional)</label>'+
       '<div style="display:flex;gap:8px;">'+
         '<input type="text" id="fLink" value="'+escapeHtml(draft.link_origem)+'" placeholder="https://..." style="flex:1;">'+
-        '<button class="btn btn-primary" id="btnLerLink" type="button" style="white-space:nowrap;">🔗 Ler automaticamente</button>'+
+        '<button class="btn btn-primary" id="btnExtrairIA" type="button" style="white-space:nowrap;">✨ Extrair com IA</button>'+
       '</div>'+
-      '<span class="hint">Cole o link e clique em "Ler automaticamente" -- o servidor busca a página e a IA já extrai os dados sozinha. Se o site bloquear acesso automatizado, copie o texto da página (Ctrl+A, Ctrl+C) e cole no campo abaixo.</span>'+
+      '<span class="hint">Cole o link e clique em "Extrair com IA" -- o servidor busca a página e preenche os campos sozinho. Sem link, clique no mesmo botão com o texto colado abaixo. Se o site bloquear acesso automatizado, copie o texto da página (Ctrl+A, Ctrl+C) e cole no campo abaixo antes de clicar.</span>'+
     '</div>'+
     '<div class="field"><label>Descrição / anúncio</label><textarea id="fTexto" rows="8" placeholder="Cole aqui o texto do anúncio: quartos, banheiros, vagas, metragem, valores, bairro etc.">'+escapeHtml(draft.texto_bruto)+'</textarea></div>'+
     '<div style="display:flex;gap:10px;flex-wrap:wrap;">'+
-      '<button class="btn btn-primary" id="btnExtrairIA">✨ Extrair com IA</button>'+
       '<button class="btn btn-ghost" id="btnPularIA">Preencher manualmente</button>'+
     '</div>'+
     '<div id="extrairStatus"></div>';
@@ -865,10 +864,60 @@ function renderStepExtrair(panel){
   panel.querySelector("#fLink").addEventListener("input", e=> draft.link_origem = e.target.value);
   panel.querySelector("#fTexto").addEventListener("input", e=> draft.texto_bruto = e.target.value);
 
+  panel.querySelector("#btnPularIA").addEventListener("click", async ()=>{
+    await persistDraft();
+    wizardStep = 1; renderWizard();
+  });
+
+  // Botão único: com link preenchido, lê a página (direto pela API da Seu
+  // Lugar quando o link é do nosso próprio sistema -- mais rápido e sem
+  // gastar chamada de IA -- ou via leitura genérica + IA para outros sites);
+  // sem link, extrai direto do texto colado na caixa abaixo.
   panel.querySelector("#btnExtrairIA").addEventListener("click", async ()=>{
-    const texto = panel.querySelector("#fTexto").value.trim();
+    const url = (panel.querySelector("#fLink").value||"").trim();
     const statusEl = panel.querySelector("#extrairStatus");
-    if (!texto){ toast("Cole o texto do anúncio primeiro.", true); return; }
+
+    if (url){
+      if (!/^https?:\/\/\S+/i.test(url)){ toast("Isso não parece um link válido (deve começar com http:// ou https://).", true); return; }
+      draft.link_origem = url;
+      statusEl.innerHTML = '<div class="status-line"><div class="spinner"></div>Lendo a página do anúncio…</div>';
+      let r;
+      try{
+        r = await api("/api/publicador/ler-link", {method:"POST", body:{link:url}});
+      }catch(err){
+        statusEl.innerHTML = '<div class="status-line" style="color:var(--red);">'+escapeHtml(err.message || "Não consegui ler o link automaticamente. Copie o texto da página e cole manualmente abaixo.")+'</div>';
+        return;
+      }
+      if (r.texto){
+        panel.querySelector("#fTexto").value = r.texto;
+        draft.texto_bruto = r.texto;
+      }
+      if (r.dados){
+        // Já veio estruturado (link do nosso próprio sistema) -- sem
+        // precisar chamar a IA, é mais rápido e 100% preciso.
+        aplicarDadosExtraidos(r.dados);
+        statusEl.innerHTML = '<div class="status-line" style="color:var(--success);">✓ Dados lidos direto do sistema — confira e ajuste na etapa de Detalhes.</div>';
+        toast("Dados extraídos automaticamente do link.");
+        await persistDraft();
+        setTimeout(()=>{ wizardStep = 1; renderWizard(); }, 700);
+        return;
+      }
+      statusEl.innerHTML = '<div class="status-line"><div class="spinner"></div>Página lida — extraindo os dados com IA…</div>';
+      try{
+        const data = await extrairComIA(r.texto, url);
+        aplicarDadosExtraidos(data);
+        statusEl.innerHTML = '<div class="status-line" style="color:var(--success);">✓ Link lido e dados extraídos automaticamente — confira e ajuste na etapa de Detalhes.</div>';
+        toast("Dados extraídos automaticamente do link.");
+        await persistDraft();
+        setTimeout(()=>{ wizardStep = 1; renderWizard(); }, 700);
+      }catch(err){
+        statusEl.innerHTML = '<div class="status-line" style="color:var(--warn);">Página lida, mas a IA não conseguiu extrair os dados automaticamente. Revise o texto acima e clique em "Extrair com IA" de novo (sem link, ele usa o texto colado).</div>';
+      }
+      return;
+    }
+
+    const texto = panel.querySelector("#fTexto").value.trim();
+    if (!texto){ toast("Cole o link do anúncio ou o texto da descrição primeiro.", true); return; }
     statusEl.innerHTML = '<div class="status-line"><div class="spinner"></div>Lendo o anúncio com IA…</div>';
     try{
       const data = await extrairComIA(texto, draft.link_origem);
@@ -879,42 +928,6 @@ function renderStepExtrair(panel){
       setTimeout(()=>{ wizardStep = 1; renderWizard(); }, 550);
     }catch(err){
       statusEl.innerHTML = '<div class="status-line" style="color:var(--red);">'+escapeHtml(err.message || "Não foi possível extrair automaticamente. Preencha manualmente.")+'</div>';
-    }
-  });
-  panel.querySelector("#btnPularIA").addEventListener("click", async ()=>{
-    await persistDraft();
-    wizardStep = 1; renderWizard();
-  });
-
-  panel.querySelector("#btnLerLink").addEventListener("click", async ()=>{
-    const linkEl = panel.querySelector("#fLink");
-    const url = (linkEl.value||"").trim();
-    const statusEl = panel.querySelector("#extrairStatus");
-    if (!url){ toast("Cole o link do anúncio primeiro.", true); return; }
-    if (!/^https?:\/\/\S+/i.test(url)){ toast("Isso não parece um link válido (deve começar com http:// ou https://).", true); return; }
-    draft.link_origem = url;
-    statusEl.innerHTML = '<div class="status-line"><div class="spinner"></div>Lendo a página do anúncio…</div>';
-    let texto;
-    try{
-      const r = await api("/api/publicador/ler-link", {method:"POST", body:{link:url}});
-      texto = r.texto;
-    }catch(err){
-      statusEl.innerHTML = '<div class="status-line" style="color:var(--red);">'+escapeHtml(err.message || "Não consegui ler o link automaticamente. Copie o texto da página e cole manualmente abaixo.")+'</div>';
-      return;
-    }
-    const textoEl = panel.querySelector("#fTexto");
-    textoEl.value = texto;
-    draft.texto_bruto = texto;
-    statusEl.innerHTML = '<div class="status-line"><div class="spinner"></div>Página lida — extraindo os dados com IA…</div>';
-    try{
-      const data = await extrairComIA(texto, url);
-      aplicarDadosExtraidos(data);
-      statusEl.innerHTML = '<div class="status-line" style="color:var(--success);">✓ Link lido e dados extraídos automaticamente — confira e ajuste na etapa de Detalhes.</div>';
-      toast("Dados extraídos automaticamente do link.");
-      await persistDraft();
-      setTimeout(()=>{ wizardStep = 1; renderWizard(); }, 700);
-    }catch(err){
-      statusEl.innerHTML = '<div class="status-line" style="color:var(--warn);">Página lida, mas a IA não conseguiu extrair os dados automaticamente. Revise o texto acima e clique em "Extrair com IA".</div>';
     }
   });
 
