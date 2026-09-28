@@ -103,6 +103,7 @@ img{max-width:100%;}
 .card-price{font-family:var(--font-mono);font-weight:700;color:var(--red);font-size:.78rem;}
 .card-date{font-size:.62rem;color:var(--text-faint);}
 .card-link{font-size:.64rem;color:var(--text-muted);text-decoration:underline;}
+.card-ig-line{font-size:.64rem;font-weight:600;}
 .card-actions{display:flex;gap:6px;margin-top:auto;padding-top:4px;}
 .card-actions .btn-sm{padding:5px 8px;font-size:.68rem;border-radius:7px;}
 
@@ -167,6 +168,17 @@ img{max-width:100%;}
 .htag input{display:none;}
 
 .caption-box{background:var(--surface-2);border:1px solid var(--border);border-radius:var(--radius-md);padding:16px;font-size:.86rem;line-height:1.6;white-space:pre-wrap;font-family:var(--font-body);}
+
+.ig-panel-head{display:flex;align-items:flex-start;gap:12px;margin-bottom:4px;}
+.ig-panel-icon{width:38px;height:38px;border-radius:11px;background:var(--red-tint);color:var(--red-ink);display:flex;align-items:center;justify-content:center;font-size:1.05rem;flex:none;}
+.ig-body{margin-top:16px;}
+.ig-badge{display:inline-flex;align-items:center;gap:7px;padding:6px 13px;border-radius:999px;font-size:.78rem;font-weight:700;}
+.ig-badge-success{background:var(--success-tint);color:var(--success);}
+.ig-badge-warn{background:var(--warn-tint);color:var(--warn);}
+.ig-badge-error{background:var(--red-tint);color:var(--red-ink);}
+.ig-badge-pending{background:var(--surface-3);color:var(--text-muted);}
+.ig-badge .spinner{width:11px;height:11px;border-width:2px;margin:0;}
+.ig-photo-preview{width:64px;height:80px;object-fit:cover;border-radius:9px;box-shadow:var(--shadow-sm);flex:none;}
 
 .wizard-nav{display:flex;justify-content:space-between;gap:10px;margin-top:24px;padding-top:20px;border-top:1px solid var(--border);}
 

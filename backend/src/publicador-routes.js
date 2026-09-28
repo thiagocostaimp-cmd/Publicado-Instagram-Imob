@@ -6,8 +6,11 @@
 //   - banco de dados do Artifact  -> tabelas "imoveis" e "publicador_config" (db.js)
 //   - armazenamento de imagens    -> Cloudinary, direto do navegador (não passa por aqui)
 //   - IA para extrair dados       -> API da Anthropic, chamada abaixo
-// A publicação automática no Instagram (que usava um conector Zapier só
-// disponível dentro do claude.ai) fica de fora por enquanto -- ver README.
+//   - publicar no Instagram       -> Instagram Graph API da Meta, chamada abaixo
+//     (antes usava um conector Zapier só disponível dentro do claude.ai)
+
+const GRAPH_API_VERSION = "v21.0";
+const MAX_MIDIAS_POST_IG = 10; // limite do próprio Instagram por publicação
 
 const Anthropic = require("@anthropic-ai/sdk");
 const db = require("./db");
@@ -36,7 +39,26 @@ const DEFAULT_CONFIG = {
   cloudinary_cloud_name: "",
   cloudinary_upload_preset: "",
   logo_url: "",
+  // ID da conta comercial do Instagram (Instagram Business Account ID) e o
+  // token de acesso (Page Access Token) usados para publicar de verdade via
+  // Instagram Graph API. O token nunca é devolvido pelo GET -- veja
+  // redactConfig() abaixo.
+  instagram_business_account_id: "",
+  instagram_access_token: "",
 };
+
+// O token de acesso do Instagram é um segredo (quem tiver ele consegue
+// publicar na conta de verdade) -- nunca devolvemos o valor guardado para o
+// navegador, só um sinalizador dizendo se já está configurado. Assim, o
+// campo na tela de Configurações fica sempre em branco por padrão (troca
+// exige digitar um valor novo; deixar em branco no salvamento mantém o
+// token que já estava guardado -- ver rota POST /api/publicador/config).
+function redactConfig(cfg) {
+  const out = Object.assign({}, cfg);
+  out.instagram_access_token_configurado = !!cfg.instagram_access_token;
+  delete out.instagram_access_token;
+  return out;
+}
 
 function register(router) {
   /* ---- Imóveis ---- */
@@ -82,13 +104,24 @@ function register(router) {
     const user = await requireAuthUser(req, res);
     if (!user) return;
     const saved = await db.getPublicadorConfig(user.organizationId);
-    return res.json(200, { config: Object.assign({}, DEFAULT_CONFIG, saved || {}) });
+    const merged = Object.assign({}, DEFAULT_CONFIG, saved || {});
+    return res.json(200, { config: redactConfig(merged) });
   });
 
   router.post("/api/publicador/config", async (req, res) => {
     const user = await requireAuthUser(req, res);
     if (!user) return;
-    await db.savePublicadorConfig(user.organizationId, req.body || {});
+    const body = Object.assign({}, req.body || {});
+    delete body.instagram_access_token_configurado; // campo só de leitura, nunca deve ser salvo
+    if (!body.instagram_access_token) {
+      // Não veio um token novo no formulário -- preserva o que já estava
+      // guardado, em vez de apagar (o navegador nunca recebe o valor real
+      // de volta, então "em branco" aqui normalmente só significa "a pessoa
+      // não mexeu nesse campo", não "quero remover o token").
+      const existing = await db.getPublicadorConfig(user.organizationId);
+      body.instagram_access_token = (existing && existing.instagram_access_token) || "";
+    }
+    await db.savePublicadorConfig(user.organizationId, body);
     return res.json(200, { ok: true });
   });
 
@@ -106,6 +139,56 @@ function register(router) {
     } catch (err) {
       console.error("Erro ao ler link:", err);
       return res.json(502, { error: err.message || "Não foi possível ler essa página." });
+    }
+  });
+
+  /* ---- Publicar no Instagram ---- */
+  router.post("/api/imoveis/:id/publicar-instagram", async (req, res) => {
+    const user = await requireAuthUser(req, res);
+    if (!user) return;
+    const imovel = await db.getImovel(user.organizationId, req.params.id);
+    if (!imovel) return res.json(404, { error: "Imóvel não encontrado." });
+
+    const saved = await db.getPublicadorConfig(user.organizationId);
+    const cfg = Object.assign({}, DEFAULT_CONFIG, saved || {});
+    if (!cfg.instagram_access_token || !cfg.instagram_business_account_id) {
+      return res.json(400, {
+        error: "Configure o token de acesso e o ID da conta do Instagram em Configurações antes de publicar.",
+      });
+    }
+
+    const midias = [];
+    if (imovel.capa_feed_url) midias.push(imovel.capa_feed_url);
+    (imovel.fotos_carrossel || []).forEach((f) => { if (f && f.url) midias.push(f.url); });
+    if (!midias.length) {
+      return res.json(400, { error: "Gere a capa (e o carrossel, se quiser) antes de publicar." });
+    }
+    if (midias.length > MAX_MIDIAS_POST_IG) {
+      return res.json(400, {
+        error: "O Instagram aceita no máximo " + MAX_MIDIAS_POST_IG + " fotos por publicação, e este imóvel tem " + midias.length + ". Remova algumas fotos do carrossel e gere novamente.",
+      });
+    }
+
+    const legenda = (imovel.legenda || "") + "\n\n" + (imovel.hashtags_selecionadas || []).join(" ");
+
+    try {
+      const resultado = await publicarNoInstagram(cfg, midias, legenda);
+      const atualizado = await db.saveImovel(user.organizationId, req.params.id, Object.assign({}, imovel, {
+        instagram_status: "publicado",
+        instagram_post_id: resultado.mediaId,
+        instagram_permalink: resultado.permalink,
+        instagram_erro_msg: "",
+        instagram_publicado_em: new Date().toISOString(),
+      }));
+      return res.json(200, { imovel: atualizado });
+    } catch (err) {
+      console.error("Erro ao publicar no Instagram:", err);
+      const msg = err.message || "Não foi possível publicar no Instagram.";
+      await db.saveImovel(user.organizationId, req.params.id, Object.assign({}, imovel, {
+        instagram_status: "erro",
+        instagram_erro_msg: msg,
+      })).catch(() => {});
+      return res.json(502, { error: msg });
     }
   });
 
@@ -194,6 +277,93 @@ function htmlParaTexto(html) {
     .replace(/&(\w+);/g, (m, name) => (name in HTML_ENTITIES ? HTML_ENTITIES[name] : m));
   text = text.replace(/[ \t]+/g, " ").replace(/\n\s*\n+/g, "\n\n").trim();
   return text;
+}
+
+// Uma chamada POST à Graph API da Meta, com os parâmetros como querystring
+// (é assim que a Graph API espera, mesmo em POST) -- devolve o JSON já
+// decodificado, ou lança um erro com a mensagem que a própria Meta devolveu
+// (geralmente já explica o problema: token expirado, mídia inválida etc.).
+async function chamarGraphAPI(path, params) {
+  const url = "https://graph.facebook.com/" + GRAPH_API_VERSION + path + "?" + new URLSearchParams(params).toString();
+  const resp = await fetch(url, { method: "POST" });
+  const data = await resp.json().catch(() => ({}));
+  if (!resp.ok || data.error) {
+    const msg = (data.error && data.error.message) || ("HTTP " + resp.status);
+    throw new Error("Instagram: " + msg);
+  }
+  return data;
+}
+
+function sleep(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+// Publica uma ou várias fotos (carrossel) no Instagram, na ordem em que
+// aparecem em midias -- a capa do feed sempre entra primeiro (ver a rota
+// acima). Como as imagens já estão hospedadas de forma durável no
+// Cloudinary (diferente do fluxo antigo via Zapier, que precisava de uma
+// hospedagem pública TEMPORÁRIA só pra esse momento), não há necessidade de
+// re-hospedar nada aqui -- é só apontar a Graph API para a URL de cada uma.
+async function publicarNoInstagram(cfg, midias, legenda) {
+  const igId = cfg.instagram_business_account_id;
+  const token = cfg.instagram_access_token;
+
+  let creationId;
+  if (midias.length === 1) {
+    const r = await chamarGraphAPI("/" + igId + "/media", {
+      image_url: midias[0],
+      caption: legenda,
+      access_token: token,
+    });
+    creationId = r.id;
+  } else {
+    // Carrossel: primeiro cria um "item" por foto (sem legenda), depois um
+    // container do tipo CAROUSEL referenciando todos os itens, com a legenda.
+    const itemIds = [];
+    for (const url of midias) {
+      const r = await chamarGraphAPI("/" + igId + "/media", {
+        image_url: url,
+        is_carousel_item: "true",
+        access_token: token,
+      });
+      itemIds.push(r.id);
+    }
+    const r = await chamarGraphAPI("/" + igId + "/media", {
+      media_type: "CAROUSEL",
+      children: itemIds.join(","),
+      caption: legenda,
+      access_token: token,
+    });
+    creationId = r.id;
+  }
+
+  // A Meta processa cada mídia de forma assíncrona antes de poder publicar
+  // -- na prática costuma estar pronta na hora (as imagens já são públicas
+  // no Cloudinary), mas uma retentativa curta cobre o caso raro de demora.
+  let publishResult;
+  for (let tentativa = 1; tentativa <= 3; tentativa++) {
+    try {
+      publishResult = await chamarGraphAPI("/" + igId + "/media_publish", {
+        creation_id: creationId,
+        access_token: token,
+      });
+      break;
+    } catch (err) {
+      if (tentativa === 3) throw err;
+      await sleep(3000 * tentativa);
+    }
+  }
+
+  const mediaId = publishResult.id;
+  let permalink = null;
+  try {
+    const info = await fetch(
+      "https://graph.facebook.com/" + GRAPH_API_VERSION + "/" + mediaId + "?fields=permalink&access_token=" + encodeURIComponent(token)
+    ).then((r) => r.json());
+    permalink = info.permalink || null;
+  } catch (e) { /* link não é essencial -- segue sem ele se falhar */ }
+
+  return { mediaId, permalink };
 }
 
 async function extrairComIA(textoBruto, linkOrigem) {

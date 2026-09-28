@@ -90,7 +90,10 @@ function blankImovel(){
     capa_feed_url:null, capa_story_url:null,
     fotos_carrossel:[], // [{url}]
     incluir_slide_cta:true,
-    legenda:"", hashtags_selecionadas:[]
+    legenda:"", hashtags_selecionadas:[],
+    // "nenhum" | "publicando" | "publicado" | "erro"
+    instagram_status:"nenhum", instagram_post_id:null, instagram_permalink:null,
+    instagram_erro_msg:"", instagram_publicado_em:null
   };
 }
 
@@ -119,6 +122,10 @@ const Store = {
   },
   async saveConfig(body){
     await api("/api/publicador/config", {method:"POST", body});
+  },
+  async publicarInstagram(id){
+    const r = await api("/api/imoveis/"+id+"/publicar-instagram", {method:"POST", body:{}});
+    return r.imovel;
   }
 };
 
@@ -632,7 +639,9 @@ function buildImovelCard(item){
   card.className = "card";
   const statusLabel = item.status==="baixado" ? "Baixado" : (item.status==="pronto" ? "Pronto pra postar" : "Rascunho");
   const statusClass = item.status==="baixado" ? "badge-baixado" : (item.status==="pronto" ? "badge-pronto" : "badge-rascunho");
-  const dataLinha = "Criado "+fmtDataCurta(item.createdAt || item.updatedAt);
+  const dataLinha = item.instagram_status==="publicado" && item.instagram_publicado_em
+    ? "Publicado "+fmtDataCurta(item.instagram_publicado_em)
+    : "Criado "+fmtDataCurta(item.createdAt || item.updatedAt);
   card.innerHTML =
     '<div class="card-thumb">'+
       (item.capa_feed_url
@@ -646,6 +655,10 @@ function buildImovelCard(item){
       '<div class="card-price">R$ '+fmtMoney(item.valor_aluguel)+'/mês</div>'+
       '<div class="card-date">'+dataLinha+'</div>'+
       (item.link_origem ? '<a href="'+escapeHtml(item.link_origem)+'" target="_blank" rel="noopener" class="card-link">🔗 Anúncio original</a>' : '')+
+      (item.instagram_status==="publicado" ? '<div class="card-ig-line" style="color:var(--success);">✓ Publicado no Instagram</div>'
+        : item.instagram_status==="erro" ? '<div class="card-ig-line" style="color:var(--red);">⚠️ Erro ao publicar</div>'
+        : '')+
+      (item.instagram_status==="publicado" && item.instagram_permalink ? '<a href="'+escapeHtml(item.instagram_permalink)+'" target="_blank" rel="noopener" class="card-link">📷 Ver no Instagram</a>' : '')+
       '<div class="card-actions">'+
         '<button class="btn btn-ghost btn-sm" style="flex:1;" data-act="edit" data-id="'+item.id+'">Continuar</button>'+
         '<button class="btn btn-danger btn-sm" data-act="del" data-id="'+item.id+'">Excluir</button>'+
@@ -737,11 +750,11 @@ document.getElementById("btnVoltarBiblioteca").addEventListener("click", ()=>{ r
 async function renderHistorico(){
   const body = document.getElementById("historicoBody");
   body.innerHTML = '<div class="status-line"><div class="spinner"></div>Carregando…</div>';
-  const list = (await Store.listImoveis()).filter(item=> item.status==="baixado");
+  const list = (await Store.listImoveis()).filter(item=> item.status==="baixado" || item.instagram_status==="publicado");
   if (!list.length){
     body.innerHTML = '<div class="empty-state">'+
-      '<h3>Nada baixado ainda</h3>'+
-      '<p>Assim que você baixar o conteúdo de um imóvel (.zip), ele aparece aqui.</p>'+
+      '<h3>Nada baixado ou publicado ainda</h3>'+
+      '<p>Assim que você baixar o conteúdo de um imóvel (.zip) ou publicar no Instagram, ele aparece aqui.</p>'+
       '</div>';
     return;
   }
@@ -1198,7 +1211,14 @@ function renderStepPublicar(panel){
       '<div class="hashtag-grid" id="hashtagGrid"></div>'+
     '</div>'+
     '<div class="field"><label>Prévia final da legenda</label><div class="caption-box" id="captionPreview"></div></div>'+
-    '<div class="banner" style="margin-top:8px;"><span>🚧</span><span>A publicação automática direto no Instagram ainda não está disponível neste painel -- por enquanto, baixe o arquivo abaixo e poste manualmente. Essa automação é o próximo passo natural.</span></div>'+
+    '<div class="panel" id="igPanel" style="margin-top:24px;background:var(--surface-2);">'+
+      '<div class="ig-panel-head">'+
+        '<div class="ig-panel-icon">📸</div>'+
+        '<div><h3 style="margin-bottom:2px;">Publicar no Instagram</h3>'+
+        '<p style="color:var(--text-muted);font-size:.85rem;">Publica a capa do feed e as fotos do carrossel juntas, num único post, direto na conta da imobiliária.</p></div>'+
+      '</div>'+
+      '<div id="igBody" class="ig-body"></div>'+
+    '</div>'+
     '<div class="checklist" id="checklistFinal" style="margin-top:20px;"></div>'+
     '<div style="display:flex;gap:10px;flex-wrap:wrap;margin-top:28px;padding-top:20px;border-top:1px solid var(--border);">'+
       '<button class="btn btn-primary" id="btnBaixarTudo">⬇️ Baixar tudo (.zip)</button>'+
@@ -1240,13 +1260,97 @@ function renderStepPublicar(panel){
       {ok: !!draft.capa_story_url, label:"Capa do story gerada"},
       {ok: !!(draft.fotos_carrossel && draft.fotos_carrossel.length), label:"Carrossel montado ("+((draft.fotos_carrossel||[]).length)+" slides)"},
       {ok: !!draft.bairro, label:"Detalhes do imóvel preenchidos"},
-      {ok: draft.hashtags_selecionadas.length>0, label:"Hashtags selecionadas"}
+      {ok: draft.hashtags_selecionadas.length>0, label:"Hashtags selecionadas"},
+      {ok: draft.instagram_status==="publicado", label:"Publicado no Instagram"}
     ];
     panel.querySelector("#checklistFinal").innerHTML = items.map(it=>
       '<div class="item"><span class="dot'+(it.ok?"":" pending")+'"></span>'+it.label+'</div>'
     ).join("");
   }
   renderChecklist();
+
+  /* ---- Publicar no Instagram (de verdade, via Instagram Graph API no backend) ---- */
+  const igBody = panel.querySelector("#igBody");
+  function coletarMidiasParaPublicar(){
+    const midias = [];
+    if (draft.capa_feed_url) midias.push(draft.capa_feed_url);
+    (draft.fotos_carrossel||[]).forEach(f=>{ if (f && f.url) midias.push(f.url); });
+    return midias;
+  }
+  function renderIgBody(){
+    if (!cfg.instagram_access_token_configurado || !cfg.instagram_business_account_id){
+      igBody.innerHTML = '<div class="ig-badge ig-badge-pending">Não configurado</div><p class="hint" style="margin-top:10px;">Configure o token de acesso e o ID da conta do Instagram em <b>Configurações</b> para habilitar a publicação automática.</p>';
+      return;
+    }
+    if (!draft.capa_feed_url){
+      igBody.innerHTML = '<div class="ig-badge ig-badge-pending">Aguardando capa</div><p class="hint" style="margin-top:10px;">Gere a capa do feed (etapa <b>Capa</b>) antes de publicar.</p>';
+      return;
+    }
+    const st = draft.instagram_status || "nenhum";
+    if (st === "publicado"){
+      igBody.innerHTML =
+        '<div class="ig-badge ig-badge-success">✓ Publicado'+(draft.instagram_publicado_em?(" — "+fmtDataCurta(draft.instagram_publicado_em)):"")+'</div>'+
+        '<div style="display:flex;gap:10px;flex-wrap:wrap;margin-top:12px;">'+
+          (draft.instagram_permalink ? '<a href="'+escapeHtml(draft.instagram_permalink)+'" target="_blank" rel="noopener" class="btn btn-ghost btn-sm">Ver post no Instagram ↗</a>' : '')+
+          '<button class="btn btn-ghost btn-sm" id="btnIgRepublicar">Publicar novamente</button>'+
+        '</div>';
+      igBody.querySelector("#btnIgRepublicar").addEventListener("click", solicitarPublicacaoIg);
+      return;
+    }
+    if (st === "publicando"){
+      igBody.innerHTML = '<div class="ig-badge ig-badge-pending"><div class="spinner"></div>Publicando…</div><p class="hint" style="margin-top:10px;">Isso pode levar até um minuto -- a Meta processa as imagens antes de publicar.</p>';
+      return;
+    }
+    if (st === "erro"){
+      igBody.innerHTML =
+        '<div class="ig-badge ig-badge-error">⚠️ Erro ao publicar</div>'+
+        '<p class="hint" style="margin-top:10px;">'+escapeHtml(draft.instagram_erro_msg||"Não foi possível publicar.")+'</p>'+
+        '<div style="margin-top:10px;"><button class="btn btn-primary btn-sm" id="btnIgTentar">Tentar novamente</button></div>';
+      igBody.querySelector("#btnIgTentar").addEventListener("click", solicitarPublicacaoIg);
+      return;
+    }
+    const totalMidias = coletarMidiasParaPublicar().length;
+    const excedeuLimite = totalMidias > 10;
+    igBody.innerHTML =
+      '<div style="display:flex;gap:14px;align-items:center;flex-wrap:wrap;">'+
+        '<img src="'+draft.capa_feed_url+'" alt="" class="ig-photo-preview">'+
+        '<div style="flex:1;min-width:200px;">'+
+          '<div class="ig-badge '+(excedeuLimite?"ig-badge-warn":"ig-badge-pending")+'" style="margin-bottom:8px;">'+(excedeuLimite?"Limite de fotos excedido":"Pronto para publicar")+'</div>'+
+          '<button class="btn btn-primary" id="btnIgPublicar"'+(excedeuLimite?" disabled":"")+'>📸 Publicar no Instagram agora</button>'+
+          (excedeuLimite
+            ? '<div class="hint" style="margin-top:6px;color:var(--red);">Este imóvel tem '+totalMidias+' fotos (capa + carrossel) — o Instagram aceita no máximo 10 por publicação. Remova algumas fotos na etapa Carrossel e gere novamente.</div>'
+            : '<div class="hint" style="margin-top:6px;">Vai para @'+escapeHtml(cfg.instagram_username||"")+' como um carrossel de '+totalMidias+' foto(s), com a legenda acima.</div>')+
+        '</div>'+
+      '</div>';
+    const btn = igBody.querySelector("#btnIgPublicar");
+    if (btn) btn.addEventListener("click", solicitarPublicacaoIg);
+  }
+  async function solicitarPublicacaoIg(){
+    const totalMidias = coletarMidiasParaPublicar().length;
+    const ok = await confirmModal(
+      "Publicar no Instagram?",
+      "Isso publica agora, de forma pública, na conta @"+(cfg.instagram_username||"")+" — um carrossel com "+totalMidias+" foto(s) (capa + carrossel) e a legenda desta tela.",
+      "Publicar agora"
+    );
+    if (!ok) return;
+    // Salva o estado atual (legenda/hashtags podem ter sido editadas nesta
+    // tela) antes de publicar -- o backend publica o que está gravado no
+    // banco, não o que está só na tela.
+    await persistDraft({ instagram_status: "publicando", instagram_erro_msg: "" });
+    renderIgBody();
+    try{
+      const atualizado = await Store.publicarInstagram(draftId);
+      Object.assign(draft, atualizado);
+      toast("Publicado no Instagram!");
+    }catch(err){
+      draft.instagram_status = "erro";
+      draft.instagram_erro_msg = err.message || "Não foi possível publicar.";
+      toast("Não foi possível publicar — veja o erro abaixo.", true);
+    }
+    renderChecklist();
+    renderIgBody();
+  }
+  renderIgBody();
 
   panel.querySelector("#btnBaixarTudo").addEventListener("click", async ()=>{
     const statusEl = panel.querySelector("#publicarStatus");
@@ -1335,6 +1439,15 @@ function renderConfig(){
       '<p class="hint">Como configurar (uma vez só, ~5 min): crie uma conta gratuita em cloudinary.com → o "Cloud name" aparece no painel principal → em Settings → Upload → "Upload presets", crie um preset novo com "Signing Mode: Unsigned" e copie o nome dele aqui. Nenhuma senha ou chave secreta é necessária nem armazenada aqui.</p>'+
     '</div>'+
     '<div class="panel" style="margin-bottom:20px;">'+
+      '<h3 style="margin-bottom:10px;">Publicar automaticamente no Instagram</h3>'+
+      '<p class="hint" style="margin-bottom:14px;">Preencha os dois campos abaixo (vem de uma conta de desenvolvedor Meta) para habilitar o botão "Publicar no Instagram agora" na última etapa de cada imóvel.</p>'+
+      '<div class="row2">'+
+        '<div class="field"><label>ID da conta comercial do Instagram</label><input type="text" id="cIgBizId" value="'+escapeHtml(cfg.instagram_business_account_id||"")+'" placeholder="ex: 17841400000000000"></div>'+
+        '<div class="field"><label>Token de acesso (Page Access Token)</label><input type="password" id="cIgToken" value="" placeholder="'+(cfg.instagram_access_token_configurado ? "•••••••• (já configurado -- deixe em branco pra manter)" : "cole o token aqui")+'"></div>'+
+      '</div>'+
+      '<p class="hint" id="cIgTokenStatus">'+(cfg.instagram_access_token_configurado ? "✓ Token já configurado neste servidor." : "Nenhum token configurado ainda.")+'</p>'+
+    '</div>'+
+    '<div class="panel" style="margin-bottom:20px;">'+
       '<h3 style="margin-bottom:10px;">Modelo de legenda</h3>'+
       '<p class="hint" style="margin-bottom:10px;">Use as variáveis: {tipo_imovel} {bairro} {codigo_unico} {numero_quartos} {numero_banheiros} {numero_vagas} {numero_cozinhas} {metragem} {valor_aluguel} {valor_condominio} {valor_iptu}</p>'+
       '<div class="field"><textarea id="cTemplate" rows="10">'+escapeHtml(cfg.legenda_template)+'</textarea></div>'+
@@ -1413,10 +1526,16 @@ function renderConfig(){
     cfg.max_hashtags_por_post = parseInt(body.querySelector("#cMaxHashtags").value,10) || 15;
     cfg.cloudinary_cloud_name = body.querySelector("#cCloudName").value.trim();
     cfg.cloudinary_upload_preset = body.querySelector("#cCloudPreset").value.trim();
+    cfg.instagram_business_account_id = body.querySelector("#cIgBizId").value.trim();
+    // Campo sempre em branco por padrão (o servidor nunca devolve o token
+    // salvo) -- só sobrescreve se a pessoa digitou algo novo aqui.
+    cfg.instagram_access_token = body.querySelector("#cIgToken").value.trim();
     const statusEl = body.querySelector("#configStatus");
     try{
       await Store.saveConfig(cfg);
-      statusEl.innerHTML = '<div class="status-line" style="color:var(--success);margin-top:12px;">✓ Configurações salvas.</div>';
+      cfg = await Store.getConfig(); // recarrega para refletir o estado real do token (redigido) e demais campos
+      renderConfig();
+      body.querySelector("#configStatus").innerHTML = '<div class="status-line" style="color:var(--success);margin-top:12px;">✓ Configurações salvas.</div>';
       toast("Configurações salvas.");
     }catch(e){
       statusEl.innerHTML = '<div class="status-line" style="color:var(--red);margin-top:12px;">Não foi possível salvar: '+escapeHtml(e.message)+'</div>';
