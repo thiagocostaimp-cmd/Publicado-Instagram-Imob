@@ -98,12 +98,13 @@ body {
 /* --- Tela de login/registro --- */
 #auth-view {
   min-height: 100vh;
+  min-height: 100dvh;
   display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: center;
   gap: 8px;
-  padding: 24px;
+  padding: 20px;
 }
 
 .auth-card {
@@ -112,7 +113,14 @@ body {
   background: var(--surface);
   border-radius: 16px;
   box-shadow: var(--sombra);
-  padding: 32px 28px;
+  padding: 28px 26px;
+}
+
+@media (max-height: 700px) {
+  .auth-card { padding: 18px 24px; }
+  .auth-card h1 { font-size: 1.3rem; margin-bottom: 2px; }
+  .auth-card .subtitle { margin-bottom: 12px; }
+  form { gap: 8px; }
 }
 
 .auth-card-top {
@@ -244,7 +252,12 @@ input:focus {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 14px 24px;
+  padding: 12px 24px;
+  position: sticky;
+  top: 0;
+  z-index: 20;
+  flex-wrap: wrap;
+  gap: 8px;
 }
 
 .topbar nav {
@@ -297,7 +310,7 @@ input:focus {
 
 main {
   flex: 1;
-  padding: 28px 24px;
+  padding: 20px 24px;
   max-width: 780px;
   width: 100%;
   margin: 0 auto;
@@ -307,8 +320,8 @@ main {
   background: var(--surface);
   border-radius: 14px;
   box-shadow: var(--sombra);
-  padding: 22px 24px;
-  margin-bottom: 18px;
+  padding: 18px 22px;
+  margin-bottom: 16px;
 }
 
 .card h2 {
