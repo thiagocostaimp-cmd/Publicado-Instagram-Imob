@@ -116,7 +116,9 @@ function blankImovel(){
     legenda:"", hashtags_selecionadas:[],
     // "nenhum" | "publicando" | "publicado" | "erro"
     instagram_status:"nenhum", instagram_post_id:null, instagram_permalink:null,
-    instagram_erro_msg:"", instagram_publicado_em:null
+    instagram_erro_msg:"", instagram_publicado_em:null,
+    // Story é publicado junto, logo depois do carrossel -- "nenhum" | "publicado" | "erro"
+    instagram_story_status:"nenhum", instagram_story_post_id:null, instagram_story_erro_msg:""
   };
 }
 
@@ -692,6 +694,9 @@ function buildImovelCard(item){
       (item.link_origem ? '<a href="'+safeUrl(item.link_origem)+'" target="_blank" rel="noopener" class="card-link">🔗 Anúncio original</a>' : '')+
       (item.instagram_status==="publicado" ? '<div class="card-ig-line" style="color:var(--success);">✓ Publicado no Instagram</div>'
         : item.instagram_status==="erro" ? '<div class="card-ig-line" style="color:var(--red);">⚠️ Erro ao publicar</div>'
+        : '')+
+      (item.instagram_story_status==="publicado" ? '<div class="card-ig-line" style="color:var(--success);">✓ Publicado no Story também</div>'
+        : item.instagram_story_status==="erro" ? '<div class="card-ig-line" style="color:var(--red);">⚠️ Erro ao publicar no Story</div>'
         : '')+
       (item.instagram_status==="publicado" && item.instagram_permalink ? '<a href="'+safeUrl(item.instagram_permalink)+'" target="_blank" rel="noopener" class="card-link">📷 Ver no Instagram</a>' : '')+
       '<div class="card-actions">'+
@@ -1336,8 +1341,14 @@ function renderStepPublicar(panel){
     }
     const st = draft.instagram_status || "nenhum";
     if (st === "publicado"){
+      const storySt = draft.instagram_story_status || "nenhum";
+      const storyLinha = !draft.capa_story_url ? ''
+        : storySt === "publicado" ? '<div class="card-ig-line" style="color:var(--success);margin-top:6px;">✓ Story publicado também</div>'
+        : storySt === "erro" ? '<div class="card-ig-line" style="color:var(--red);margin-top:6px;">⚠️ Story não publicou: '+escapeHtml(draft.instagram_story_erro_msg||"")+'</div>'
+        : '';
       igBody.innerHTML =
         '<div class="ig-badge ig-badge-success">✓ Publicado'+(draft.instagram_publicado_em?(" — "+fmtDataCurta(draft.instagram_publicado_em)):"")+'</div>'+
+        storyLinha+
         '<div style="display:flex;gap:10px;flex-wrap:wrap;margin-top:12px;">'+
           (draft.instagram_permalink ? '<a href="'+safeUrl(draft.instagram_permalink)+'" target="_blank" rel="noopener" class="btn btn-ghost btn-sm">Ver post no Instagram ↗</a>' : '')+
           '<button class="btn btn-ghost btn-sm" id="btnIgRepublicar">Publicar novamente</button>'+
@@ -1378,7 +1389,7 @@ function renderStepPublicar(panel){
           '<button class="btn btn-primary" id="btnIgPublicar"'+(excedeuLimite?" disabled":"")+'>📸 Publicar no Instagram agora</button>'+
           (excedeuLimite
             ? '<div class="hint" style="margin-top:6px;color:var(--red);">Este imóvel tem '+totalMidias+' fotos (capa + carrossel) — o Instagram aceita no máximo 10 por publicação. Remova algumas fotos na etapa Carrossel e gere novamente.</div>'
-            : '<div class="hint" style="margin-top:6px;">Vai para @'+escapeHtml(cfg.instagram_username||"")+' como um carrossel de '+totalMidias+' foto(s), com a legenda acima.</div>')+
+            : '<div class="hint" style="margin-top:6px;">Vai para @'+escapeHtml(cfg.instagram_username||"")+' como um carrossel de '+totalMidias+' foto(s), com a legenda acima'+(draft.capa_story_url?' — e a capa do story é publicada em seguida, automaticamente':' — gere a capa do story na etapa Capa para publicar lá também')+'.</div>')+
         '</div>'+
       '</div>';
     const btn = igBody.querySelector("#btnIgPublicar");
@@ -1388,7 +1399,7 @@ function renderStepPublicar(panel){
     const totalMidias = coletarMidiasParaPublicar().length;
     const ok = await confirmModal(
       "Publicar no Instagram?",
-      "Isso publica agora, de forma pública, na conta @"+(cfg.instagram_username||"")+" — um carrossel com "+totalMidias+" foto(s) (capa + carrossel) e a legenda desta tela.",
+      "Isso publica agora, de forma pública, na conta @"+(cfg.instagram_username||"")+" — um carrossel com "+totalMidias+" foto(s) (capa + carrossel) e a legenda desta tela"+(draft.capa_story_url?", e a capa do story em seguida":"")+".",
       "Publicar agora"
     );
     if (!ok) return;

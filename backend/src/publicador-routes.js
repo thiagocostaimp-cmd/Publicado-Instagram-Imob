@@ -255,13 +255,28 @@ function register(router) {
 
     try {
       const resultado = await publicarNoInstagram(cfg, midias, legenda);
+      const camposStory = { instagram_story_status: "nenhum", instagram_story_post_id: null, instagram_story_erro_msg: "" };
+      // O Story é publicado à parte, depois do carrossel -- se faltar a
+      // capa do story ou essa chamada falhar, o post principal (já
+      // publicado) não é desfeito; só registramos o erro do story.
+      if (imovel.capa_story_url) {
+        try {
+          const resultadoStory = await publicarStoryNoInstagram(cfg, imovel.capa_story_url);
+          camposStory.instagram_story_status = "publicado";
+          camposStory.instagram_story_post_id = resultadoStory.mediaId;
+        } catch (errStory) {
+          console.error("Erro ao publicar Story no Instagram:", errStory);
+          camposStory.instagram_story_status = "erro";
+          camposStory.instagram_story_erro_msg = errStory.message || "Não foi possível publicar o story.";
+        }
+      }
       const atualizado = await db.saveImovel(user.organizationId, req.params.id, Object.assign({}, imovel, {
         instagram_status: "publicado",
         instagram_post_id: resultado.mediaId,
         instagram_permalink: resultado.permalink,
         instagram_erro_msg: "",
         instagram_publicado_em: new Date().toISOString(),
-      }));
+      }, camposStory));
       return res.json(200, { imovel: atualizado });
     } catch (err) {
       console.error("Erro ao publicar no Instagram:", err);
@@ -543,6 +558,38 @@ async function publicarNoInstagram(cfg, midias, legenda) {
   } catch (e) { /* link não é essencial -- segue sem ele se falhar */ }
 
   return { mediaId, permalink };
+}
+
+// Publica a capa no formato Story (1080x1920, gerada à parte da capa do
+// feed -- ver composeCapa("story", ...) no frontend). Stories não aceitam
+// legenda nem múltiplas fotos via API, então é sempre uma imagem única, sem
+// caption. Reaproveita o mesmo container -> media_publish da Graph API,
+// só trocando media_type para STORIES.
+async function publicarStoryNoInstagram(cfg, storyUrl) {
+  const igId = cfg.instagram_business_account_id;
+  const token = cfg.instagram_access_token;
+
+  const container = await chamarGraphAPI("/" + igId + "/media", {
+    image_url: storyUrl,
+    media_type: "STORIES",
+    access_token: token,
+  });
+
+  let publishResult;
+  for (let tentativa = 1; tentativa <= 3; tentativa++) {
+    try {
+      publishResult = await chamarGraphAPI("/" + igId + "/media_publish", {
+        creation_id: container.id,
+        access_token: token,
+      });
+      break;
+    } catch (err) {
+      if (tentativa === 3) throw err;
+      await sleep(3000 * tentativa);
+    }
+  }
+
+  return { mediaId: publishResult.id };
 }
 
 async function extrairComIA(textoBruto, linkOrigem) {
